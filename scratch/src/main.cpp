@@ -1,9 +1,8 @@
-#include <cpprelude/IO.h>
-using namespace cppr;
+#include "benchmark.h"
 
-i32
+int
 main()
 {
-	cppr::printf("Hello, I'm {}\n", "Mostafa");
+	benchmark();
 	return 0;
-}	
+}

@@ -21,4 +21,5 @@ workspace "open-compiler-tools"
 
 	include (cpprelude_path .. "/cpprelude.lua")
 	include (rgx_path .. "/rgx.lua")
+	include "unittest/unittest.lua"
 	include "scratch/scratch.lua"

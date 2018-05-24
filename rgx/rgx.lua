@@ -16,6 +16,11 @@ project "rgx"
 		cpprelude_path .. "/include/"
 	}
 
+	links
+	{
+		"cpprelude"
+	}
+
 	if os.istarget("linux") then
 
 		buildoptions {"-std=c++14", "-Wall", "-fno-rtti", "-fno-exceptions"}
@@ -31,9 +36,6 @@ project "rgx"
 		end
 
 		buildoptions {"/utf-8", "/std:c++14"}
-
-		filter "configurations:debug"
-			links {"dbghelp"}
 	end
 
 	filter "configurations:debug"

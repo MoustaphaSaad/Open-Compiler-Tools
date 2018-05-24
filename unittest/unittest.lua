@@ -1,43 +1,34 @@
-project "scratch"
+local catch_path = "deps/Catch2"
+
+project "unittest"
 	language "C++"
 	kind "ConsoleApp"
 	targetdir (bin_path .. "/%{cfg.platform}/%{cfg.buildcfg}/")
-	location  (build_path .. "/scratch/")
+	location  (build_path .. "/unittest/")
 
-	files
-	{
-		"include/**.h",
-		"src/**.cpp"
-	}
+	files {"include/**.h", "src/**.cpp"}
 
-	includedirs
-	{
+	includedirs {
 		"include/",
 		cpprelude_path .. "/include/",
+		catch_path .. "/single_include/",
 		rgx_path .. "/include/"
 	}
 
-	links
-	{
-		"cpprelude",
-		"rgx"
-	}
+	links {"cpprelude", "rgx"}
 
 	if os.istarget("linux") then
 
-		buildoptions {"-std=c++14", "-Wall", "-fno-rtti", "-fno-exceptions"}
+		buildoptions {"-std=c++14", "-Wall"}
 		linkoptions {"-pthread"}
 
-		filter "configurations:debug"
-			linkoptions {"-rdynamic"}
-
 	elseif os.istarget("windows") then
-		
+
 		if os.getversion().majorversion == 10.0 then
 			systemversion(win10_sdk_version())
 		end
 
-		buildoptions {"/utf-8", "/std:c++14"}
+		buildoptions {"/utf-8"}
 	end
 
 	filter "configurations:debug"
