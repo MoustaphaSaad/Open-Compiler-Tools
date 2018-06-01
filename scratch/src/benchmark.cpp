@@ -3,6 +3,7 @@
 #include <rgx/Compiler.h>
 #include <rgx/VM.h>
 #include <cpprelude/IO.h>
+#include <cmath>
 #include <cpprelude/Benchmark.h>
 #include <cpprelude/Allocators.h>
 
@@ -33,7 +34,8 @@ const char* corpse[] =
 	"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 };
 usize corpse_index = 16;
-Stack_Allocator vm_stack(MEGABYTES(25));
+Stack_Allocator rgx_stack(MEGABYTES(25));
+//auto rgx_stack = os->global_memory;
 
 void
 rand_data()
@@ -41,28 +43,34 @@ rand_data()
 	corpse_index = rand() % 16;
 }
 
-
 bool
 bm_linear_match(Stopwatch& watch)
 {
 	watch.start();
-	vm_stack.free_all();
-	Tape exp(vm_stack);
-	VM_State vm(vm_stack);
-	compile("moustaphaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", exp, true, vm_stack);
-	auto result = run(vm, corpse[corpse_index], exp);
+	bool result;
+	{
+		rgx_stack.free_all();
+		Tape exp(rgx_stack);
+		VM_State vm(rgx_stack);
+		compile("moustaphaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", exp, true, rgx_stack);
+		result = run(vm, corpse[corpse_index], exp);
+	}
 	watch.stop();
 	return result;
 }
 
-std::smatch
+bool
 bm_std_linear_match(Stopwatch& watch)
 {
 	watch.start();
-	std::regex exp("moustaphaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-	std::smatch result;
-	std::string data(corpse[corpse_index]);
-	std::regex_match(data, result, exp);
+	bool result;
+	{
+		std::regex exp("moustaphaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+		std::smatch mtch;
+		std::string data(corpse[corpse_index]);
+		std::regex_match(data, mtch, exp);
+		result = !mtch.empty();
+	}
 	watch.stop();
 	return result;
 }
@@ -72,46 +80,64 @@ bool
 bm_or(Stopwatch& watch)
 {
 	watch.start();
-	Tape exp;
-	VM_State vm;
-	compile("saad|hani|moustapha", exp);
-	auto result = run(vm, corpse[corpse_index], exp);
-	watch.stop();
-	return result;
-}
-
-std::smatch
-bm_std_or(Stopwatch& watch)
-{
-	watch.start();
-	std::regex exp("saad|hani|moustapha");
-	std::smatch result;
-	std::string data(corpse[corpse_index]);
-	std::regex_match(data, result, exp);
+	bool result;
+	{
+		rgx_stack.free_all();
+		Tape exp(rgx_stack);
+		VM_State vm(rgx_stack);
+		compile("saad|hani|moustapha", exp, true, rgx_stack);
+		result = run(vm, corpse[corpse_index], exp);
+	}
 	watch.stop();
 	return result;
 }
 
 bool
-bm_star(Stopwatch& watch)
+bm_std_or(Stopwatch& watch)
 {
 	watch.start();
-	Tape exp;
-	VM_State vm;
-	compile("abc*|def", exp);
-	auto result = run(vm, corpse[corpse_index], exp);
+	bool result;
+	{
+		std::regex exp("saad|hani|moustapha");
+		std::smatch mtch;
+		std::string data(corpse[corpse_index]);
+		std::regex_match(data, mtch, exp);
+		result = !mtch.empty();
+	}
 	watch.stop();
 	return result;
 }
 
-std::smatch
+
+bool
+bm_star(Stopwatch& watch)
+{
+	watch.start();
+	bool result;
+	{
+		rgx_stack.free_all();
+		Tape exp(rgx_stack);
+		VM_State vm(rgx_stack);
+		compile("abc*|def", exp, true, rgx_stack);
+		result = run(vm, corpse[corpse_index], exp);
+	}
+	watch.stop();
+	return result;
+}
+
+bool
 bm_std_star(Stopwatch& watch)
 {
 	watch.start();
-	std::regex exp("abc*|def");
-	std::smatch result;
-	std::string data(corpse[corpse_index]);
-	std::regex_match(data, result, exp);
+	bool result;
+
+	{
+		std::regex exp("abc*|def");
+		std::smatch mtch;
+		std::string data(corpse[corpse_index]);
+		std::regex_match(data, mtch, exp);
+		result = !mtch.empty();
+	}
 	watch.stop();
 	return result;
 }
@@ -120,22 +146,30 @@ bool
 bm_plus(Stopwatch& watch)
 {
 	watch.start();
-	Tape exp;
-	VM_State vm;
-	compile("abc+", exp);
-	auto result = run(vm, corpse[corpse_index], exp);
+	bool result;
+	{
+		rgx_stack.free_all();
+		Tape exp(rgx_stack);
+		VM_State vm(rgx_stack);
+		compile("abc+", exp, true, rgx_stack);
+		result = run(vm, corpse[corpse_index], exp);
+	}
 	watch.stop();
 	return result;
 }
 
-std::smatch
+bool
 bm_std_plus(Stopwatch& watch)
 {
 	watch.start();
-	std::regex exp("abc+");
-	std::smatch result;
-	std::string data(corpse[corpse_index]);
-	std::regex_match(data, result, exp);
+	bool result;
+	{
+		std::regex exp("abc+");
+		std::smatch mtch;
+		std::string data(corpse[corpse_index]);
+		std::regex_match(data, mtch, exp);
+		result = !mtch.empty();
+	}
 	watch.stop();
 	return result;
 }
@@ -145,22 +179,30 @@ bool
 bm_email(Stopwatch& watch)
 {
 	watch.start();
-	Tape exp;
-	VM_State vm;
-	compile("[a-zA-Z0-9_.+\\-]+@[a-zA-Z0-9\\-]+\\.[a-zA-Z0-9\\-.]+", exp);
-	auto result = run(vm, corpse[corpse_index], exp);
+	bool result;
+	{
+		rgx_stack.free_all();
+		Cached_Tape exp(rgx_stack);
+		VM_State vm(rgx_stack);
+		compile("[a-zA-Z0-9_.+\\-]+@[a-zA-Z0-9\\-]+\\.[a-zA-Z0-9\\-.]+", exp, true, rgx_stack);
+		result = run(vm, corpse[corpse_index], exp);
+	}
 	watch.stop();
 	return result;
 }
 
-std::smatch
+bool
 bm_std_email(Stopwatch& watch)
 {
 	watch.start();
-	std::regex exp("[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+");
-	std::smatch result;
-	std::string data(corpse[corpse_index]);
-	std::regex_match(data, result, exp);
+	bool result;
+	{
+		std::regex exp("[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+");
+		std::smatch mtch;
+		std::string data(corpse[corpse_index]);
+		std::regex_match(data, mtch, exp);
+		result = !mtch.empty();
+	}
 	watch.stop();
 	return result;
 }
@@ -170,22 +212,30 @@ bool
 bm_cid(Stopwatch& watch)
 {
 	watch.start();
-	Tape exp;
-	VM_State vm;
-	compile("[a-zA-Z_][a-zA-Z0-9_]*", exp);
-	auto result = run(vm, corpse[corpse_index], exp);
+	bool result;
+	{
+		rgx_stack.free_all();
+		Tape exp(rgx_stack);
+		VM_State vm(rgx_stack);
+		compile("[a-zA-Z_][a-zA-Z0-9_]*", exp, true, rgx_stack);
+		result = run(vm, corpse[corpse_index], exp);
+	}
 	watch.stop();
 	return result;
 }
 
-std::smatch
+bool
 bm_std_cid(Stopwatch& watch)
 {
 	watch.start();
-	std::regex exp("[a-zA-Z_][a-zA-Z0-9_]*");
-	std::smatch result;
-	std::string data(corpse[corpse_index]);
-	std::regex_match(data, result, exp);
+	bool result;
+	{
+		std::regex exp("[a-zA-Z_][a-zA-Z0-9_]*");
+		std::smatch mtch;
+		std::string data(corpse[corpse_index]);
+		std::regex_match(data, mtch, exp);
+		result = !mtch.empty();
+	}
 	watch.stop();
 	return result;
 }
@@ -195,34 +245,53 @@ bool
 bm_backtrack(Stopwatch& watch)
 {
 	watch.start();
-	Tape exp;
-	VM_State vm;
-	compile("a?a?a?a?a?a?a?a?a?a?a?a?aaaaaaaaa", exp);
-	auto result = run(vm, corpse[corpse_index], exp);
+	bool result;
+	{
+		rgx_stack.free_all();
+		Tape exp(rgx_stack);
+		VM_State vm(rgx_stack);
+		compile("a?a?a?a?a?a?a?a?a?a?a?a?aaaaaaaaa", exp, true, rgx_stack);
+		result = run(vm, corpse[corpse_index], exp);
+	}
 	watch.stop();
 	return result;
 }
 
-std::smatch
+bool
 bm_std_backtrack(Stopwatch& watch)
 {
 	watch.start();
-	std::regex exp("a?a?a?a?a?a?a?a?a?a?a?a?aaaaaaaaa");
-	std::smatch result;
-	std::string data(corpse[corpse_index]);
-	std::regex_match(data, result, exp);
+	bool result;
+	{
+		std::regex exp("a?a?a?a?a?a?a?a?a?a?a?a?aaaaaaaaa");
+		std::smatch mtch;
+		std::string data(corpse[corpse_index]);
+		std::regex_match(data, mtch, exp);
+		result = !mtch.empty();
+	}
 	watch.stop();
 	return result;
+}
+
+void
+debug()
+{
+	Tape program;
+	compile("abc*|def"_const_str, program);
+	println(program);
+	cpp_gen(os->unbuf_stdout, program);
+	int x = 234;
 }
 
 void
 benchmark()
 {
 	srand(time(0));
+
 	rand_data();
 	println(corpse_index);
 	println(corpse[corpse_index]);
-	corpse_index = 13;
+	
 	compare_benchmarks(
 		summary("std linear match", bm_std_linear_match),
 		summary("linear match", bm_linear_match)

@@ -1,6 +1,7 @@
 #include "rgx/Compiler.h"
 #include <cpprelude/Stack_Array.h>
 #include <cpprelude/Hash_Map.h>
+#include <cpprelude/Double_List.h>
 using namespace cppr;
 
 namespace rgx
@@ -85,7 +86,7 @@ namespace rgx
 		usize old_A_count = A.count();
 		A.expand_back_raw(B.count());
 		copy<Bytecode>(A.range(old_A_count, A.count()), B.all());
-		
+
 		compiler->operands.pop();
 		return RGX_ERROR::OK;
 	}
@@ -637,6 +638,7 @@ namespace rgx
 						}
 
 						//continue adding the runes
+						block.reserve(end.data - start.data);
 						do
 						{
 							++start.data;
@@ -719,10 +721,17 @@ namespace rgx
 		return RGX_ERROR::OK;
 	}
 
+	//optimize declarations
+	void
+	_optimize_tape(const Tape& input, Tape& output, const Memory_Context& context);
+
+	void
+	_optimize_tape(const Tape& input, Cached_Tape& output, const Memory_Context& context);
+
 	RGX_ERROR
 	compile(const String_Range& expression,
-			 Tape& program, bool optimize,
-			 const Memory_Context& context)
+			Tape& program, bool optimize,
+			const Memory_Context& context)
 	{
 		Bytecode_Compiler compiler(context);
 
@@ -730,12 +739,363 @@ namespace rgx
 		if(compiler_result != RGX_ERROR::OK)
 			return compiler_result;
 
-		program = std::move(compiler.operands.top());
-		compiler.operands.pop();
-
 		//add the halt command at the end of the program
-		program.insert_back(Bytecode::make_ins(ISA::HALT));
+		compiler.operands.top().insert_back(Bytecode::make_ins(ISA::HALT));
+
+		if(optimize)
+		{
+			_optimize_tape(compiler.operands.top(), program, context);
+		}
+		else
+		{
+			program = std::move(compiler.operands.top());
+			compiler.operands.pop();
+		}
 
 		return RGX_ERROR::OK;
+	}
+
+	RGX_ERROR
+	compile(const String_Range& expression,
+			Cached_Tape& program, bool optimize,
+			const Memory_Context& context)
+	{
+		Bytecode_Compiler compiler(context);
+
+		RGX_ERROR compiler_result = _compile(expression, &compiler);
+		if(compiler_result != RGX_ERROR::OK)
+			return compiler_result;
+
+		//add the halt command at the end of the program
+		compiler.operands.top().insert_back(Bytecode::make_ins(ISA::HALT));
+
+		if(optimize)
+		{
+			_optimize_tape(compiler.operands.top(), program, context);
+		}
+		else
+		{
+			program.tape = std::move(compiler.operands.top());
+			compiler.operands.pop();
+		}
+
+		return RGX_ERROR::OK;
+	}
+
+
+	//optimization code
+	struct Seq_Block
+	{
+		usize address = 0;
+		usize count = 0;
+
+		usize new_address = 0;
+		usize new_count = 0;
+	};
+
+	struct Branch
+	{
+		constexpr static const usize MAX_BLOCKS = 2;
+
+		usize address = 0;
+		usize new_address = 0;
+		ISA ins = ISA::NONE;
+		Seq_Block* blocks[MAX_BLOCKS] = {nullptr};
+	};
+
+	struct Optimizer
+	{
+		Double_List<Seq_Block> blocks;
+		Dynamic_Array<Branch> branches;
+
+		Optimizer(const Memory_Context& context)
+			:blocks(context),
+			 branches(context)
+		{}
+	};
+
+	Seq_Block*
+	_link_jump_with_block(Optimizer& optimizer, usize jump_address)
+	{
+		for(auto it = optimizer.blocks.begin();
+			it != optimizer.blocks.end();
+			++it)
+		{
+			Seq_Block& block = *it;
+
+			if(jump_address == block.address)
+			{
+				return &block;
+			}
+			//if jump_address is within the current block
+			else if(jump_address > block.address &&
+					jump_address < (block.address + block.count))
+			{
+				usize old_count = block.count;
+				block.count = jump_address - block.address;
+
+				Seq_Block new_block;
+				new_block.address = jump_address;
+				new_block.count = old_count - block.count;
+				optimizer.blocks.insert_after(it, new_block);
+			}
+		}
+
+		return nullptr;
+	}
+
+	void
+	_detect_branches_and_split_blocks(Optimizer& optimizer, const Tape& input)
+	{
+		for(usize i = 0; i < input.count(); ++i)
+		{
+			const Bytecode& code = input[i];
+			if(code.type != Bytecode::INST)
+				continue;
+
+			if (code.ins == ISA::SPLT ||
+				code.ins == ISA::SPLT2)
+			{
+				Branch splt;
+				splt.address = i;
+				splt.ins = code.ins;
+
+				//+3 for the size of the splt instruction in bytecode
+				usize first_branch_address = input[i + 1].offset + i + 3;
+				usize second_branch_address = input[i + 2].offset + i + 3;
+
+				splt.blocks[0] = _link_jump_with_block(optimizer, first_branch_address);
+				splt.blocks[1] = _link_jump_with_block(optimizer, second_branch_address);
+
+				optimizer.branches.insert_back(splt);
+			}
+			else if(code.ins == ISA::JUMP)
+			{
+				Branch jump;
+
+				jump.address = i;
+				jump.ins = code.ins;
+				//+2 for the size of the jump instruction in bytecode
+				usize jump_address = input[i + 1].offset + i + 2;
+				jump.blocks[0] = _link_jump_with_block(optimizer, jump_address);
+
+				optimizer.branches.insert_back(jump);
+			}
+		}
+	}
+
+	inline static void
+	_optimize_block(const Tape& input, Tape& output, Seq_Block& block,
+					Slice<Branch>& branches, Cached_Tape::Cache_Type* cache = nullptr)
+	{
+		usize old_count = output.count();
+		usize block_extent = block.address + block.count;
+		for(usize i = block.address; i < block_extent; ++i)
+		{
+			//optimize the rune instructions into mtch instruction
+			if (input[i].type == Bytecode::INST &&
+				input[i].ins  == ISA::RUNE &&
+				input[i+1].type == Bytecode::DATA)
+			{
+				usize i_it;
+				usize runes_count = 0;
+				for(i_it = i; i_it < block_extent; ++i_it)
+				{
+					if (input[i_it].type == Bytecode::INST &&
+						input[i_it].ins == ISA::RUNE)
+					{
+						if(input[i_it + 1].type != Bytecode::DATA)
+							break;
+						++runes_count;
+						++i_it;
+					}
+					else
+					{
+						break;
+					}
+				}
+
+				//if it's just one rune then no need to compress it
+				if(runes_count == 1)
+				{
+					output.insert_back(input[i]);
+				}
+				else
+				{
+					output.insert_back(Bytecode::make_ins(ISA::MTCH));
+					output.insert_back(Bytecode::make_count(runes_count));
+
+					i_it = i + 1;
+					for(usize j = 0; j < runes_count; ++j, i_it += 2)
+						output.insert_back(input[i_it]);
+
+					i = i_it - 2;
+				}
+			}
+			//map branches to its new addresses
+			else if(!branches.empty() && branches.front().address == i)
+			{
+				branches.front().new_address = output.count();
+				branches.pop_front();
+				output.insert_back(input[i]);
+			}
+			else if(cache != nullptr &&
+					input[i].type == Bytecode::INST &&
+					(input[i].ins == ISA::SET ||
+					 input[i].ins == ISA::NSET))
+			{
+				//insert the set or nset instruction
+				output.insert_back(input[i]);
+				//get the count instruction
+				++i;
+				output.insert_back(input[i]);
+				auto& cache_it = cache->insert(i - 1, cppr::Hash_Set<Rune>(cache->mem_context))->value;
+				usize runes_count = input[i].count;
+				cache_it.reserve(runes_count * 2);
+
+				//start with the letters
+				++i;
+				for(usize j = 0; j < runes_count; ++j, ++i)
+				{
+					output.insert_back(input[i]);
+					cache_it.insert(input[i].data);
+				}
+				//for the outer loop consistancy
+				--i;
+			}
+			else
+			{
+				output.insert_back(input[i]);
+			}
+		}
+
+		block.new_count = output.count() - old_count;
+	}
+
+	inline static void
+	_write_optimized_blocks(Optimizer& optimizer, const Tape& input, Tape& output,
+							Cached_Tape::Cache_Type* cache = nullptr)
+	{
+		auto branches = optimizer.branches.all();
+		for(auto& block: optimizer.blocks)
+		{
+			block.new_address = output.count();
+			_optimize_block(input, output, block, branches, cache);
+		}
+	}
+
+	inline static void
+	_branches_fixup(Optimizer& optimizer, Tape& output)
+	{
+		for(const auto& branch: optimizer.branches)
+		{
+			switch(branch.ins)
+			{
+				case ISA::SPLT:
+				case ISA::SPLT2:
+				{
+					//fix the branches
+					//+3 for the size of the splt instruction
+					output[branch.new_address + 1].offset = branch.blocks[0]->new_address - (branch.new_address + 3);
+					output[branch.new_address + 2].offset = branch.blocks[1]->new_address - (branch.new_address + 3);
+				}
+				break;
+
+				case ISA::JUMP:
+				{
+					//+2 for the size of the jump instruction
+					output[branch.new_address + 1].offset = branch.blocks[0]->new_address - (branch.new_address + 2);
+				}
+				break;
+
+				default:
+				break;
+			}
+		}
+	}
+
+	void
+	_optimize_tape(const Tape& input, Tape& output, const Memory_Context& context)
+	{
+		/**
+		 * The optimization techniques is simple we need to compress the:
+		 * Rune
+		 * a
+		 * Rune
+		 * b
+		 * Rune
+		 * c
+		 * 
+		 * to:
+		 * MTCH
+		 * 3
+		 * a
+		 * b
+		 * c
+		 * 
+		 * This involves detecting branching and split the code to blocks then optimize the blocks
+		 * individually
+		 */
+
+		output.reserve(input.count());
+		Optimizer optimizer(context);
+
+		//init the entire program as a single big block
+		Seq_Block global_block;
+		global_block.address = 0;
+		global_block.count = input.count();
+		optimizer.blocks.insert_back(global_block);
+
+		//extract the branchs and split the above single big block
+		_detect_branches_and_split_blocks(optimizer, input);
+
+		//write the optimized blocks
+		_write_optimized_blocks(optimizer, input, output);
+
+		//fix the branches addresses
+		_branches_fixup(optimizer, output);
+	}
+
+	void
+	_optimize_tape(const Tape& input, Cached_Tape& output, const Memory_Context& context)
+	{
+		/**
+		 * The optimization techniques is simple we need to compress the:
+		 * Rune
+		 * a
+		 * Rune
+		 * b
+		 * Rune
+		 * c
+		 * 
+		 * to:
+		 * MTCH
+		 * 3
+		 * a
+		 * b
+		 * c
+		 * 
+		 * This involves detecting branching and split the code to blocks then optimize the blocks
+		 * individually
+		 * Also we need to build the cache for the set instructions
+		 */
+
+		output.tape.reserve(input.count());
+		Optimizer optimizer(context);
+
+		//init the entire program as a single big block
+		Seq_Block global_block;
+		global_block.address = 0;
+		global_block.count = input.count();
+		optimizer.blocks.insert_back(global_block);
+
+		//extract the branchs and split the above single big block
+		_detect_branches_and_split_blocks(optimizer, input);
+
+		//write the optimized blocks
+		_write_optimized_blocks(optimizer, input, output.tape, &output.cache);
+
+		//fix the branches addresses
+		_branches_fixup(optimizer, output.tape);
 	}
 }

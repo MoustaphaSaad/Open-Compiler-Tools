@@ -23,4 +23,10 @@ namespace rgx
 			Tape& program,
 			bool optimize = true,
 			const cppr::Memory_Context& context = cppr::os->global_memory);
+
+	API_RGX RGX_ERROR
+	compile(const cppr::String_Range& expression,
+			Cached_Tape& program,
+			bool optimize = true,
+			const cppr::Memory_Context& context = cppr::os->global_memory);
 }
