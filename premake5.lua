@@ -12,6 +12,7 @@ bin_path 		= path.getabsolute("bin")
 build_path 		= path.getabsolute("build")
 cpprelude_path 	= path.getabsolute("deps/cpprelude/cpprelude")
 rgx_path 		= path.getabsolute("rgx")
+oct_path 		= path.getabsolute("oct")
 
 workspace "open-compiler-tools"
 	configurations {"debug", "release"}
@@ -21,5 +22,6 @@ workspace "open-compiler-tools"
 
 	include (cpprelude_path .. "/cpprelude.lua")
 	include (rgx_path .. "/rgx.lua")
+	include (oct_path .. "/oct.lua")
 	include "unittest/unittest.lua"
 	include "scratch/scratch.lua"

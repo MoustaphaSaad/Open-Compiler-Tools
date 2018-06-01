@@ -138,7 +138,14 @@ namespace rgx
 							bool result = cache_it.lookup(thread.data.front()) != cache_it.end();
 							if(result)
 								thread.data.pop_front();
+
+							thread.code = thread.code.range(thread.code.begin() + count, thread.code.end());
 							return result;
+						}
+						else
+						{
+							thread.code = thread.code.range(thread.code.begin() + count, thread.code.end());
+							return false;
 						}
 					}
 
@@ -167,7 +174,14 @@ namespace rgx
 							bool result = cache_it.lookup(thread.data.front()) == cache_it.end();
 							if(result)
 								thread.data.pop_front();
+
+							thread.code = thread.code.range(thread.code.begin() + count, thread.code.end());
 							return result;
+						}
+						else
+						{
+							thread.code = thread.code.range(thread.code.begin() + count, thread.code.end());
+							return false;
 						}
 					}
 

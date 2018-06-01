@@ -2,9 +2,13 @@
 
 #include <rgx/Compiler.h>
 #include <rgx/VM.h>
+#include <oct/Proto_Lexer.h>
+#include <oct/Lxpr.h>
+
 #include <cpprelude/IO.h>
-#include <cmath>
 #include <cpprelude/Benchmark.h>
+#include <cpprelude/String.h>
+#include <cpprelude/File.h>
 #include <cpprelude/Allocators.h>
 
 #include <string>
@@ -12,6 +16,7 @@
 
 using namespace cppr;
 using namespace rgx;
+using namespace oct;
 
 const char* corpse[] =
 {
@@ -273,19 +278,47 @@ bm_std_backtrack(Stopwatch& watch)
 	return result;
 }
 
+enum TOKEN_TYPE
+{
+	TOKEN_NONE,
+	TOKEN_ABCDEF
+};
 void
 debug()
 {
-	Tape program;
-	compile("abc*|def"_const_str, program);
-	println(program);
-	cpp_gen(os->unbuf_stdout, program);
-	int x = 234;
+	// Tape program;
+	// compile("abc*|def"_const_str, program);
+	// println(program);
+	// cpp_gen(os->unbuf_stdout, program);
+	// int x = 234;
+
+	File f = File::open("lxpr-code/test01.lxpr", IO_MODE::READ, OPEN_MODE::OPEN_ONLY).value;
+	auto content_mem = os->alloc<byte>(f.size() + 1);
+	vreadb(f, content_mem.all());
+	content_mem[f.size()] = 0;
+	String content(std::move(content_mem));
+
+	Stopwatch watch;
+	watch.start();
+	Proto_Lexer lexer;
+	meta_lexer_create(lexer);
+
+	Token tkn;
+	auto stream = content.all();
+	usize count = 0;
+	while(lexer.token(stream, tkn))
+		++count;
+	watch.stop();
+	cppr::printf("token count = {}\n", count);
+	cppr::printf("lexing = {}ms\n", watch.milliseconds());
+
 }
 
 void
 benchmark()
 {
+	debug();
+	return;
 	srand(time(0));
 
 	rand_data();

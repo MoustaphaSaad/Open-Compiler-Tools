@@ -1,8 +1,8 @@
-project "scratch"
+project "oct"
 	language "C++"
-	kind "ConsoleApp"
+	kind "SharedLib"
 	targetdir (bin_path .. "/%{cfg.platform}/%{cfg.buildcfg}/")
-	location  (build_path .. "/scratch/")
+	location  (build_path .. "/oct/")
 
 	files
 	{
@@ -14,15 +14,13 @@ project "scratch"
 	{
 		"include/",
 		cpprelude_path .. "/include/",
-		rgx_path .. "/include/",
-		oct_path .. "/include/"
+		rgx_path .. "/include"
 	}
 
 	links
 	{
 		"cpprelude",
-		"rgx",
-		"oct"
+		"rgx"
 	}
 
 	if os.istarget("linux") then
@@ -34,7 +32,7 @@ project "scratch"
 			linkoptions {"-rdynamic"}
 
 	elseif os.istarget("windows") then
-		
+
 		if os.getversion().majorversion == 10.0 then
 			systemversion(win10_sdk_version())
 		end
@@ -43,11 +41,12 @@ project "scratch"
 	end
 
 	filter "configurations:debug"
-		defines {"DEBUG"}
+		targetsuffix "d"
+		defines {"DEBUG", "OCT_DLL"}
 		symbols "On"
 
 	filter "configurations:release"
-		defines {"NDEBUG"}
+		defines {"NDEBUG", "OCT_DLL"}
 		optimize "On"
 
 	filter "platforms:x86"
