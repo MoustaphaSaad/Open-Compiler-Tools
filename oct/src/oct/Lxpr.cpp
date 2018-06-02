@@ -80,37 +80,47 @@ namespace oct
 		}))
 			return false;
 
-		if(!lexer.push_token("\""_const_str, Token_Action
+		if(!lexer.push_token("\"(\\\\.|[^\"])*\""_const_str, Token_Action
 		{
-			[](const String_Range& match, String_Range& stream, Token& tkn)
-			{
-				bool ignore = false;
-				auto str = stream;
-				for(str.pop_front(); !str.empty(); str.pop_front())
-				{
-					Rune c = str.front();
-					if(c == '\\')
-					{
-						ignore = true;
-					}
-					else if(c == '"' && !ignore)
-					{
-						tkn.str = stream.range(match.end(), str.begin());
-						//pop the last '"'
-						str.pop_front();
-						stream = str;
-						return true;
-					}
-					else
-					{
-						ignore = false;
-					}
-				}
-				return false;
-			},
-			META_TOKENS::ID,
+			nullptr,
+			META_TOKENS::STRING,
 			false
 		}))
 			return false;
+
+		// if(!lexer.push_token("\""_const_str, Token_Action
+		// {
+		// 	[](const String_Range& match, String_Range& stream, Token& tkn)
+		// 	{
+		// 		bool ignore = false;
+		// 		auto str = stream;
+		// 		for(str.pop_front(); !str.empty(); str.pop_front())
+		// 		{
+		// 			Rune c = str.front();
+		// 			if(c == '\\')
+		// 			{
+		// 				ignore = true;
+		// 			}
+		// 			else if(c == '"' && !ignore)
+		// 			{
+		// 				tkn.str = stream.range(match.end(), str.begin());
+		// 				//pop the last '"'
+		// 				str.pop_front();
+		// 				stream = str;
+		// 				return true;
+		// 			}
+		// 			else
+		// 			{
+		// 				ignore = false;
+		// 			}
+		// 		}
+		// 		return false;
+		// 	},
+		// 	META_TOKENS::STRING,
+		// 	false
+		// }))
+		// 	return false;
+
+		return true;
 	}
 }

@@ -43,7 +43,7 @@ namespace oct
 		{
 			Match_Result tmp_res;
 			//execute the tape
-			if(run(rgx_vm, stream, *tape_it, tmp_res))
+			if(run(rgx_vm, stream, *tape_it, tmp_res, MATCH_MODE::FIRST_MATCH))
 			{
 				//if this token should be ignored then do exactly that
 				if(action_it->ignore)

@@ -76,25 +76,30 @@ namespace rgx
 
 				thread.code.pop_front();
 
+				auto& top_thread = vm.threads.top();
 				if(current_ins.ins == ISA::SPLT)
 				{
 					thread.code = program.range(thread.code.begin() + A, program.end());
-					vm.threads.emplace(
-						Thread_State
-						{
-							program.range(thread.code.begin() + B, program.end()),
-							thread.data
-						});
+					Thread_State new_thread
+					{
+						program.range(thread.code.begin() + B, program.end()),
+						thread.data
+					};
+					if (top_thread.code != new_thread.code ||
+						top_thread.data != new_thread.data)
+						vm.threads.push(new_thread);
 				}
 				else
 				{
 					thread.code = program.range(thread.code.begin() + B, program.end());
-					vm.threads.emplace(
-						Thread_State
-						{
-							program.range(thread.code.begin() + A, program.end()),
-							thread.data
-						});
+					Thread_State new_thread
+					{
+						program.range(thread.code.begin() + A, program.end()),
+						thread.data
+					};
+					if (top_thread.code != new_thread.code ||
+						top_thread.data != new_thread.data)
+						vm.threads.push(new_thread);
 				}
 
 				return true;
@@ -131,7 +136,7 @@ namespace rgx
 				{
 					if(cache)
 					{
-						auto& it = cache->lookup(ins_index);
+						auto it = cache->lookup(ins_index);
 						if(it != cache->end())
 						{
 							auto& cache_it = it->value;
@@ -167,7 +172,7 @@ namespace rgx
 				{
 					if(cache)
 					{
-						auto& it = cache->lookup(ins_index);
+						auto it = cache->lookup(ins_index);
 						if(it != cache->end())
 						{
 							auto& cache_it = it->value;
@@ -410,8 +415,9 @@ namespace rgx
 	inline static void
 	_emit_block(IO_Trait* io, const Tape& program, Gen_Block& block, Slice<Gen_Branch>& branches)
 	{
-		vprintf(io, "BLOCK_{}:\n", block.label);
+		vprintf(io, "\t\tcase {}:{{\n", block.label);
 		usize block_extent = block.address + block.count;
+		bool fallthrough = true;
 		for(usize i = block.address; i < block_extent; ++i)
 		{
 			const auto& code = program[i];
@@ -425,16 +431,17 @@ namespace rgx
 					if (program[i].type == Bytecode::INST &&
 						program[i].ins == ISA::ANY)
 					{
-						vprintf(io, "\tif(it == input.end()) goto LOCAL_BLOCK_{}_FAILURE;\n", block.label);
-						vprints(io, "\t++it;\n\n");
+						vprints(io, "\t\t\tif(it == input.end()) { current_state = static_cast<usize>(-1); break; }\n");
+						vprints(io, "\t\t\t++it;\n\n");
 					}
 					else
 					{
-						vprintf(io, "\tif(it == input.end()) goto LOCAL_BLOCK_{}_FAILURE;\n", block.label);
-						vprintf(io, "\tc = *it;\n");
-						vprintf(io, "\tif(c != '{}') goto LOCAL_BLOCK_{}_FAILURE;\n", program[i].data, block.label);
-						vprints(io, "\t++it;\n\n");
+						vprints(io, "\t\t\tif(it == input.end()) { current_state = static_cast<usize>(-1); break; }\n");
+						vprints(io, "\t\t\tc = *it;\n");
+						vprintf(io, "\t\t\tif(c != '{}') {{ current_state = static_cast<usize>(-1); break; }\n", program[i].data);
+						vprints(io, "\t\t\t++it;\n\n");
 					}
+					fallthrough = true;
 				break;
 
 				case ISA::MTCH:
@@ -444,21 +451,24 @@ namespace rgx
 					++i;
 					for(usize j = 0; j < count; ++j)
 					{
-						vprintf(io, "\tif(it == input.end()) goto LOCAL_BLOCK_{}_FAILURE;\n", block.label);
-						vprintf(io, "\tc = *it;\n");
-						vprintf(io, "\tif(c != '{}') goto LOCAL_BLOCK_{}_FAILURE;\n", program[i + j].data, block.label);
-						vprints(io, "\t++it;\n\n");
+						vprints(io, "\t\t\tif(it == input.end()) { current_state = static_cast<usize>(-1); break; }\n");
+						vprints(io, "\t\t\tc = *it;\n");
+						vprintf(io, "\t\t\tif(c != '{}') {{ current_state = static_cast<usize>(-1); break; }\n", program[i + j].data);
+						vprints(io, "\t\t\t++it;\n\n");
 					}
+					fallthrough = true;
 					i += count - 1;
 				}
 				break;
 
 				case ISA::SPLT:
 				{
-					// vprints(io, "\tbranch_success = false;\n");
-					vprintf(io, "\tgoto BLOCK_{};\n", branches.front().blocks[0]->label);
-					// vprints(io, "\tif(!branch_success)\n");
-					// vprintf(io, "\t\tgoto BLOCK_{};\n", branches.front().blocks[1]->label);
+					vprints(io, "\t\t\tif(state_pointer == STATES_MAX) return false;\n");
+					vprintf(io, "\t\t\tcurrent_state = {};\n", branches.front().blocks[0]->label);
+					vprintf(io, "\t\t\tstates[state_pointer] = {};\n", branches.front().blocks[1]->label);
+					vprints(io, "\t\t\tstates_data[state_pointer] = it;\n");
+					vprints(io, "\t\t\t++state_pointer;\n");
+					fallthrough = false;
 					branches.pop_front();
 					i += 2;
 				}
@@ -466,10 +476,12 @@ namespace rgx
 
 				case ISA::SPLT2:
 				{
-					// vprints(io, "\tbranch_success = false;\n");
-					vprintf(io, "\tgoto BLOCK_{};\n", branches.front().blocks[1]->label);
-					// vprints(io, "\tif(!branch_success)\n");
-					// vprintf(io, "\t\tgoto BLOCK_{};\n", branches.front().blocks[0]->label);
+					vprints(io, "\t\t\tif(state_pointer == STATES_MAX) return false;\n");
+					vprintf(io, "\t\t\tcurrent_state = {};\n", branches.front().blocks[1]->label);
+					vprintf(io, "\t\t\tstates[state_pointer] = {};\n", branches.front().blocks[0]->label);
+					vprints(io, "\t\t\tstates_data[state_pointer] = it;\n");
+					vprints(io, "\t\t\t++state_pointer;\n");
+					fallthrough = false;
 					branches.pop_front();
 					i += 2;
 				}
@@ -477,7 +489,8 @@ namespace rgx
 
 				case ISA::JUMP:
 				{
-					vprintf(io, "\tgoto BLOCK_{};\n", branches.front().blocks[0]->label);
+					vprintf(io, "\t\t\tcurrent_state = {};\n", branches.front().blocks[0]->label);
+					fallthrough = false;
 					branches.pop_front();
 					++i;
 				}
@@ -488,26 +501,27 @@ namespace rgx
 					++i;
 					u32 count = program[i].count;
 					++i;
-					vprintf(io, "\tif(it == input.end()) goto LOCAL_BLOCK_{}_FAILURE;\n", block.label);
-					vprintf(io, "\tc = *it;\n");
+					vprints(io, "\t\t\tif(it == input.end()) { current_state = static_cast<usize>(-1); break; }\n");
+					vprints(io, "\t\t\tc = *it;\n");
 
-					vprints(io, "\tif(\n");
+					vprints(io, "\t\t\tif(\n");
 					for(usize j = 0; j < count; ++j)
 					{
-						vprintf(io, "\t\tc == {}", program[i + j].data);
+						vprintf(io, "\t\t\t\tc == '{}'", program[i + j].data);
 						if(j != count - 1)
 							vprints(io, " ||\n");
 						else
 							vprints(io, ")\n");
 					}
 					i += count - 1;
-					vprints(io, "\t{\n");
-						vprints(io, "\t\t++it;\n");
-					vprints(io, "\t}\n");
-					vprints(io, "\telse\n");
-					vprints(io, "\t{\n");
-						vprintf(io, "\t\tgoto LOCAL_BLOCK_{}_FAILURE;\n", block.label);
-					vprints(io, "\t}\n");
+					vprints(io, "\t\t\t{\n");
+						vprints(io, "\t\t\t\t++it;\n");
+					vprints(io, "\t\t\t}\n");
+					vprints(io, "\t\t\telse\n");
+					vprints(io, "\t\t\t{\n");
+						vprintf(io, "\t\t\t\tcurrent_state = static_cast<usize>(-1); break;\n", block.label);
+					vprints(io, "\t\t\t}\n");
+					fallthrough = true;
 				}
 				break;
 
@@ -516,38 +530,42 @@ namespace rgx
 					++i;
 					u32 count = program[i].count;
 					++i;
-					vprintf(io, "\tif(it == input.end()) goto LOCAL_BLOCK_{}_FAILURE;\n", block.label);
-					vprintf(io, "\tc = *it;\n");
+					vprints(io, "\t\t\tif(it == input.end()) { current_state = static_cast<usize>(-1); break; }\n");
+					vprints(io, "\t\t\tc = *it;\n");
 
-					vprints(io, "\tif(\n");
+					vprints(io, "\t\t\tif(\n");
 					for(usize j = 0; j < count; ++j)
 					{
-						vprintf(io, "\t\tc != {}", program[i + j].data);
+						vprintf(io, "\t\t\t\tc != '{}'", program[i + j].data);
 						if(j != count - 1)
 							vprints(io, " &&\n");
 						else
 							vprints(io, ")\n");
 					}
 					i += count - 1;
-					vprints(io, "\t{\n");
-						vprints(io, "\t\t++it;\n");
-					vprints(io, "\t}\n");
-					vprints(io, "\telse\n");
-					vprints(io, "\t{\n");
-						vprintf(io, "\t\tgoto LOCAL_BLOCK_{}_FAILURE;\n", block.label);
-					vprints(io, "\t}\n");
+					vprints(io, "\t\t\t{\n");
+						vprints(io, "\t\t\t\t++it;\n");
+					vprints(io, "\t\t\t}\n");
+					vprints(io, "\t\t\telse\n");
+					vprints(io, "\t\t\t{\n");
+						vprintf(io, "\t\t\t\tcurrent_state = static_cast<usize>(-1); break;\n", block.label);
+					vprints(io, "\t\t\t}\n");
+					fallthrough = true;
 				}
 				break;
 
 				case ISA::HALT:
-					vprints(io, "\tgoto SUCCESS;\n");
+					vprints(io, "\t\t\thalt = true;\n");
+					fallthrough = false;
 				break;
 
 				default:
 				break;
 			}
 		}
-		vprintf(io, "\tgoto LOCAL_BLOCK_{}_SUCCESS;\n", block.label);
+		if(fallthrough)
+			vprintf(io, "\t\t\tcurrent_state = {};\n", block.label + 1);
+		vprints(io, "\t\t\t} break;\n");
 	}
 
 	inline static void
@@ -558,8 +576,6 @@ namespace rgx
 		for(auto& block: gen.blocks)
 		{
 			_emit_block(io, program, block, branches);
-			vprintf(io, "LOCAL_BLOCK_{}_FAILURE: goto BLOCK_{};\n", block.label, block.label + 1);
-			vprintf(io, "LOCAL_BLOCK_{}_SUCCESS: goto BLOCK_{};\n", block.label, block.label + 1);
 		}
 	}
 
@@ -587,14 +603,28 @@ namespace rgx
 		vprints(io, "{\n");
 			vprints(io, "\tauto it = input.begin();\n");
 			vprints(io, "\tRune c{};\n");
-			vprints(io, "\tbool branch_success = false;\n");
-			_emit_program(io, gen, program);
-			vprintf(io, "BLOCK_{}: goto FAILURE;\n", gen.label_counter);
-			vprints(io, "SUCCESS:\n");
-			vprints(io, "\tres.accepted = true;\n");
-			vprints(io, "\tres.str = input.range(input.begin(), it);\n");
-			vprints(io, "\treturn true;\n");
-			vprints(io, "FAILURE:\n");
+			vprints(io, "\tconstexpr usize STATES_MAX = 32;\n");
+			vprints(io, "\tusize states[STATES_MAX] = {0};\n");
+			vprints(io, "\tString_Iterator states_data[STATES_MAX];\n");
+			vprints(io, "\tusize state_pointer = 0;\n");
+			vprints(io, "\tusize current_state = 0;\n");
+			vprints(io, "\tbool halt = false;\n");
+			vprints(io, "\twhile(!halt && current_state != static_cast<usize>(-1))\n");
+			vprints(io, "\t{\n");
+				vprints(io, "\t\tswitch(current_state)\n");
+				vprints(io, "\t\t{\n");
+					_emit_program(io, gen, program);
+					vprints(io, "\t\tdefault:{\n");
+						vprints(io, "\t\t\tcurrent_state = static_cast<usize>(-1);\n");
+					vprints(io, "\t\t} break;\n");
+				vprints(io, "\t\t}\n");
+				vprints(io, "\t\tif(current_state == static_cast<usize>(-1) && state_pointer != 0){\n");
+					vprints(io, "\t\t\t--state_pointer;\n");
+					vprints(io, "\t\t\tcurrent_state = states[state_pointer];\n");
+					vprints(io, "\t\t\tit = states_data[state_pointer];\n");
+				vprints(io, "\t\t}\n");
+			vprints(io, "\t}\n");
+			vprints(io, "\tif(halt) { res.accepted = true; res.str = input.range(input.begin(), it); return true; }\n");
 			vprints(io, "\treturn false;\n");
 		vprints(io, "}\n");
 		return true;

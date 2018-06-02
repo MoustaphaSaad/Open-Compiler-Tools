@@ -4,7 +4,6 @@
 #include <cpprelude/Ranges.h>
 #include <cpprelude/Memory_Context.h>
 #include <cpprelude/Dynamic_Array.h>
-#include <cpprelude/Ring_Array.h>
 #include <cpprelude/OS.h>
 #include <rgx/VM.h>
 

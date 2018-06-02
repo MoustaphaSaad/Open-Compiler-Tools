@@ -9,7 +9,7 @@ namespace oct
 	{
 		enum : cppr::u32
 		{
-			NONE,
+			NONE,					//invalid token type
 			WHITESPACE,				//any whitespace
 			COMMENT,				//single line comment
 			ASSIGN,					//=
