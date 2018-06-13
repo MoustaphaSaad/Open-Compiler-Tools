@@ -82,6 +82,28 @@ namespace oct
 		return false;
 	}
 
+	usize
+	Proto_Parser::token_skip(String_Range& stream, usize count)
+	{
+		usize i = 0;
+		for(i = 0; i < count; ++i)
+		{
+			if(!token_buffer.empty())
+			{
+				token_buffer.remove_front();
+				continue;
+			}
+
+			if(lexer == nullptr)
+				break;
+
+			Token tmp_token;
+			if(!lexer->token(stream, tmp_token))
+				break;
+		}
+		return i;
+	}
+
 	bool
 	Proto_Parser::token_expect(String_Range& stream, u32 token_type)
 	{
@@ -143,5 +165,21 @@ namespace oct
 		}
 
 		return false;
+	}
+
+	bool
+	Proto_Parser::token_expect(cppr::String_Range& stream, Token& token)
+	{
+		if(!token_buffer.empty())
+		{
+			token = token_buffer.front();
+			token_buffer.remove_front();
+			return true;
+		}
+
+		if(lexer == nullptr)
+			return false;
+
+		return lexer->token(stream, token);
 	}
 }

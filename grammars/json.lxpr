@@ -1,0 +1,26 @@
+lexer_name :: json;
+
+t_whitespace: ignore token = "[ \t\n\r]+";
+t_open_curly: token = "{";
+t_close_curly: token = "}";
+t_open_bracket: token = "\\[";
+t_close_bracket: token = "\\]";
+t_comma: token = ",";
+t_colon: token = ":";
+t_null: token = "null";
+t_true: token = "true";
+t_false: token = "false";
+
+
+t_number: token = t_int
+				| t_int t_frac
+				| t_int t_exp
+				| t_int t_frac t_exp;
+
+t_digits: token = "[0-9][0-9]*";
+t_e: token = "e|e\\+|e-|E|E\\+|E-";
+t_int: token = "-?" t_digits;
+t_frac: token = "//." t_digits;
+t_exp: token = t_e t_digits;
+
+t_string: token = "\"(\\\\.|[^\"])*\"";

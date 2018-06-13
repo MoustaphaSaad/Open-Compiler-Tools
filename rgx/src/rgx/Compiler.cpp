@@ -2,6 +2,7 @@
 #include <cpprelude/Stack_Array.h>
 #include <cpprelude/Hash_Map.h>
 #include <cpprelude/Double_List.h>
+#include <cpprelude/Allocators.h>
 using namespace cppr;
 
 namespace rgx
@@ -777,6 +778,363 @@ namespace rgx
 		{
 			program.tape = std::move(compiler.operands.top());
 			compiler.operands.pop();
+		}
+
+		return RGX_ERROR::OK;
+	}
+
+	//New Compile
+	struct NFA_Node
+	{
+		enum TYPE { SPLT = 256, HALT = 257 };
+
+		i32 data;
+		NFA_Node* branches[2] = { nullptr };
+	};
+
+	struct NFA
+	{
+		NFA_Node* start_state;
+		Double_List<NFA_Node*> end_states;
+
+		NFA(const Memory_Context& context = os->global_memory)
+			:end_states(context)
+		{}
+	};
+
+	struct NFA_Compiler
+	{
+		Arena_Allocator node_arena;
+		Stack_Array<NFA*> operands;
+		Stack_Array<OPERATORS> operators;
+
+		bool ignore;
+		bool recommend_concat;
+
+		NFA_Compiler(const Memory_Context& context = os->global_memory)
+			:node_arena(context),
+			 operands(context),
+			 operators(context),
+			 ignore(false),
+			 recommend_concat(false)
+		{
+			node_arena.block_size = KILOBYTES(4);
+		}
+
+		NFA*
+		nfa_create()
+		{
+			NFA* result = node_arena.template alloc<NFA>().ptr;
+			::new (result) NFA(node_arena);
+			return result;
+		}
+
+		NFA_Node*
+		nfa_node_create()
+		{
+			NFA_Node* res = node_arena.template alloc<NFA_Node>().ptr;
+			::new (res) NFA_Node();
+			return res;
+		}
+	};
+
+	inline static RGX_ERROR
+	_op_concat(NFA_Compiler& compiler)
+	{
+		if(compiler.operands.count() < 2)
+			return RGX_ERROR::OPERANDS_COUNT_MISMATCH;
+
+		NFA* B = compiler.operands.top();
+		compiler.operands.pop();
+
+		NFA* A = compiler.operands.top();
+		compiler.operands.pop();
+
+		for(auto out_node: A->end_states)
+			out_node->branches[0] = B->start_state;
+		
+		A->end_states = std::move(B->end_states);
+		compiler.operands.push(A);
+		return RGX_ERROR::OK;
+	}
+
+	inline static RGX_ERROR
+	_op_or(NFA_Compiler& compiler)
+	{
+		if(compiler.operands.count() < 2)
+			return RGX_ERROR::OPERANDS_COUNT_MISMATCH;
+
+		NFA* B = compiler.operands.top();
+		compiler.operands.pop();
+
+		NFA* A = compiler.operands.top();
+		compiler.operands.pop();
+
+		NFA_Node* or_node = compiler.nfa_node_create();
+		or_node->data = NFA_Node::SPLT;
+		or_node->branches[0] = A->start_state;
+		or_node->branches[1] = B->start_state;
+		A->start_state = or_node;
+		for(const auto& node: B->end_states)
+			A->end_states.insert_back(node);
+
+		compiler.operands.push(A);
+		return RGX_ERROR::OK;
+	}
+
+	inline static RGX_ERROR
+	_op_star(NFA_Compiler& compiler)
+	{
+		if(compiler.operands.count() < 1)
+			return RGX_ERROR::OPERANDS_COUNT_MISMATCH;
+		
+		NFA* A = compiler.operands.top();
+		compiler.operands.pop();
+
+		NFA_Node* star_node = compiler.nfa_node_create();
+		star_node->data = NFA_Node::SPLT;
+		star_node->branches[0] = A->start_state;
+		for(auto n: A->end_states)
+			n->branches[0] = star_node;
+		A->end_states.clear();
+		A->end_states.insert_back(star_node);
+		A->start_state = star_node;
+
+		compiler.operands.push(A);
+		return RGX_ERROR::OK;
+	}
+
+	inline static RGX_ERROR
+	_eval_op(NFA_Compiler& compiler)
+	{
+		if(compiler.operators.empty())
+			return RGX_ERROR::EVAL_NO_OPERATOR;
+		
+		auto op = compiler.operators.top();
+		compiler.operators.pop();
+		switch(op)
+		{
+			case OPERATORS::CONCAT:
+				return _op_concat(compiler);
+
+			case OPERATORS::OR:
+				return _op_or(compiler);
+
+			case OPERATORS::STAR:
+				return _op_star(compiler);
+
+			default:
+				return RGX_ERROR::GENERIC_ERROR;
+		}
+	}
+
+	inline static RGX_ERROR
+	_push_op(NFA_Compiler& compiler, OPERATORS op)
+	{
+		while(!compiler.operators.empty() &&
+			  compiler.operators.top() >= op)
+		{
+			RGX_ERROR res = _eval_op(compiler);
+			if(res != RGX_ERROR::OK) return res;
+		}
+
+		compiler.operators.push(op);
+		return RGX_ERROR::OK;
+	}
+
+	inline static RGX_ERROR
+	_handle_state(NFA_Compiler& compiler)
+	{
+		if(compiler.recommend_concat)
+		{
+			//push a concat operation
+			RGX_ERROR res = _push_op(compiler, OPERATORS::CONCAT);
+			if(res != RGX_ERROR::OK) return res;
+			compiler.recommend_concat = false;
+		}
+		return RGX_ERROR::OK;
+	}
+
+	RGX_ERROR
+	compile_2(const String_Range& expression)
+	{
+		NFA_Compiler compiler;
+		auto rgx_start = expression.bytes.begin();
+		auto rgx_end = expression.bytes.end();
+
+		for(auto it = rgx_start;
+			it != rgx_end;
+			++it)
+		{
+			auto b = *it;
+			if(!compiler.ignore)
+			{
+				switch(b)
+				{
+					case '\\':
+					{
+						compiler.ignore = true;
+					}
+						break;
+
+					case '|':
+					{
+						RGX_ERROR res = _push_op(compiler, OPERATORS::OR);
+						if(res != RGX_ERROR::OK) return res;
+						compiler.ignore = false;
+						compiler.recommend_concat = false;
+					}
+						break;
+
+					case '*':
+					{
+						OPERATORS op = OPERATORS::STAR;
+						auto maybe_nongreedy = it + 1;
+						if (maybe_nongreedy != rgx_end &&
+							*maybe_nongreedy == '?')
+						{
+							op = OPERATORS::STAR_NON_GREEDY;
+							it = maybe_nongreedy;
+						}
+
+						RGX_ERROR res = _push_op(compiler, op);
+						if(res != RGX_ERROR::OK) return res;
+						compiler.ignore = false;
+						compiler.recommend_concat = true;
+					}
+						break;
+
+					case '+':
+					{
+						OPERATORS op = OPERATORS::PLUS;
+						auto maybe_nongreedy = it + 1;
+						if (maybe_nongreedy != rgx_end &&
+							*maybe_nongreedy == '?')
+						{
+							op = OPERATORS::PLUS_NON_GREEDY;
+							it = maybe_nongreedy;
+						}
+
+						RGX_ERROR res = _push_op(compiler, op);
+						if(res != RGX_ERROR::OK) return res;
+						compiler.ignore = false;
+						compiler.recommend_concat = true;
+					}
+						break;
+
+					case '?':
+					{
+						OPERATORS op = OPERATORS::OPTIONAL;
+						auto maybe_nongreedy = it + 1;
+						if (maybe_nongreedy != rgx_end &&
+							*maybe_nongreedy == '?')
+						{
+							op = OPERATORS::OPTIONAL_NON_GREEDY;
+							it = maybe_nongreedy;
+						}
+
+						RGX_ERROR res = _push_op(compiler, op);
+						if(res != RGX_ERROR::OK) return res;
+						compiler.ignore = false;
+						compiler.recommend_concat = true;
+					}
+						break;
+
+					case '.':
+					{
+
+					}
+						break;
+
+					case '(':
+					{
+						RGX_ERROR res = _handle_state(compiler);
+						if(res != RGX_ERROR::OK) return res;
+
+						compiler.operators.push(OPERATORS::OPEN_PAREN);
+
+						compiler.ignore = false;
+						compiler.recommend_concat = false;
+					}
+						break;
+
+					case ')':
+					{
+						while(!compiler.operators.empty() && compiler.operators.top() != OPERATORS::OPEN_PAREN)
+						{
+							RGX_ERROR res = _eval_op(compiler);
+							if(res != RGX_ERROR::OK) return res;
+						}
+
+						compiler.operators.pop();
+
+						compiler.ignore = false;
+						compiler.recommend_concat = true;
+					}
+						break;
+
+					default:
+					{
+						RGX_ERROR res = _handle_state(compiler);
+						if(res != RGX_ERROR::OK) return res;
+
+						NFA* nfa = compiler.nfa_create();
+
+						NFA_Node* node = compiler.nfa_node_create();
+						node->data = b;
+						nfa->start_state = node;
+
+						NFA_Node* prev = node;
+						for(++it; !_is_operator(*it) && it != rgx_end; ++it)
+						{
+							NFA_Node* new_node = compiler.nfa_node_create();
+							new_node->data = *it;
+							prev->branches[0] = new_node;
+							prev = new_node;
+						}
+						--it;
+
+						nfa->end_states.insert_back(prev);
+						compiler.operands.push(nfa);
+
+						compiler.ignore = false;
+						compiler.recommend_concat = true;
+					}
+						break;
+				}
+			}
+			else
+			{
+				RGX_ERROR res = _handle_state(compiler);
+				if(res != RGX_ERROR::OK) return res;
+
+				NFA* nfa = compiler.nfa_create();
+
+				NFA_Node* node = compiler.nfa_node_create();
+				node->data = b;
+				nfa->start_state = node;
+
+				NFA_Node* prev = node;
+				for(++it; !_is_operator(*it) && it != rgx_end; ++it)
+				{
+					NFA_Node* new_node = compiler.nfa_node_create();
+					new_node->data = *it;
+					prev->branches[0] = new_node;
+					prev = new_node;
+				}
+
+				nfa->end_states.insert_back(prev);
+				compiler.operands.push(nfa);
+
+				compiler.ignore = false;
+				compiler.recommend_concat = true;
+			}
+		}
+
+		while(!compiler.operators.empty())
+		{
+			RGX_ERROR res = _eval_op(compiler);
+			if(res != RGX_ERROR::OK) return res;
 		}
 
 		return RGX_ERROR::OK;

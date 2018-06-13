@@ -1,0 +1,34 @@
+lexer_name :: lxpr;
+
+p_action :: {{
+	//This is a code
+}};
+
+t_whitespace: ignore token = "[ \t\n\r]+" > p_action;
+t_comment: ignore token = "//[^\n]*";
+t_assign: token = "=";
+t_semicolon: token = ";";
+t_scope: token = "::";
+t_colon: token = ":";
+t_arrow: token = ">";
+t_token: token = "token";
+t_ignore: token = "ignore";
+t_lexer_name: token = "lexer_name";
+t_id: token = "[a-zA-Z_][a-zA-Z0-9_]*";
+t_string: token = "\"(\\\\.|[^\"])*\"";
+
+
+// r_single_type_tag: rule = t_ignore
+// 				  		| t_token;
+
+// r_type_tags: rule = r_single_type_tag
+// 			 	  | r_single_type_tag r_type_tags;
+
+// r_token_decl: rule = t_id t_colon r_type_tags t_assign t_string;
+
+// r_stmt: rule = r_token_decl;
+
+// r_program: rule = r_stmt t_semicolon
+// 				| r_stmt t_semicolon r_program;
+
+// start: rule = r_program;
