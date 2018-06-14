@@ -474,7 +474,7 @@ namespace lxpr
 			}
 		}
 		LINE(1, "};");
-		LINE(1,);
+		LINE(1);
 
 		LINE(1, "bool lexer_create(oct::Proto_Lexer& lexer);");
 		LINE(0, "}");

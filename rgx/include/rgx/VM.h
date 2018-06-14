@@ -60,20 +60,7 @@ namespace rgx
 	API_RGX bool
 	run(VM_State& vm,
 		const cppr::String_Range& input,
-		const Cached_Tape& program,
-		Match_Result& res,
-		MATCH_MODE mode = MATCH_MODE::FIRST_MATCH);
-
-	API_RGX bool
-	run(VM_State& vm,
-		const cppr::String_Range& input,
 		const Tape& program,
-		MATCH_MODE mode = MATCH_MODE::FIRST_MATCH);
-
-	API_RGX bool
-	run(VM_State& vm,
-		const cppr::String_Range& input,
-		const Cached_Tape& program,
 		MATCH_MODE mode = MATCH_MODE::FIRST_MATCH);
 
 	API_RGX bool

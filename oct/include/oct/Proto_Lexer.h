@@ -30,7 +30,7 @@ namespace oct
 		cppr::Memory_Context mem_context;
 		cppr::usize line_number, column_number;
 		cppr::Dynamic_Array<Token_Action> actions;
-		cppr::Dynamic_Array<rgx::Cached_Tape> rgx_tapes;
+		cppr::Dynamic_Array<rgx::Tape> rgx_tapes;
 		rgx::VM_State rgx_vm;
 
 		API_OCT Proto_Lexer(const cppr::Memory_Context& context = cppr::os->global_memory);

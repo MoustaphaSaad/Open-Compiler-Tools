@@ -7,8 +7,7 @@ using namespace cppr;
 namespace rgx
 {
 	inline static bool
-	_exec_ins(VM_State& vm, Thread_State& thread, const Tape& program,
-			  const Cached_Tape::Cache_Type* cache = nullptr)
+	_exec_ins(VM_State& vm, Thread_State& thread, const Tape& program)
 	{
 		switch(thread.code.front().ins)
 		{
@@ -61,11 +60,8 @@ namespace rgx
 				return true;
 			}
 
-			case ISA::SPLT2:
 			case ISA::SPLT:
 			{
-				auto current_ins = thread.code.front();
-
 				//get the first branch
 				thread.code.pop_front();
 				i32 A = thread.code.front().offset;
@@ -77,30 +73,16 @@ namespace rgx
 				thread.code.pop_front();
 
 				auto& top_thread = vm.threads.top();
-				if(current_ins.ins == ISA::SPLT)
+				Thread_State new_thread
 				{
-					thread.code = program.range(thread.code.begin() + A, program.end());
-					Thread_State new_thread
-					{
-						program.range(thread.code.begin() + B, program.end()),
-						thread.data
-					};
-					if (top_thread.code != new_thread.code ||
-						top_thread.data != new_thread.data)
-						vm.threads.push(new_thread);
-				}
-				else
-				{
-					thread.code = program.range(thread.code.begin() + B, program.end());
-					Thread_State new_thread
-					{
-						program.range(thread.code.begin() + A, program.end()),
-						thread.data
-					};
-					if (top_thread.code != new_thread.code ||
-						top_thread.data != new_thread.data)
-						vm.threads.push(new_thread);
-				}
+					program.range(thread.code.begin() + B, program.end()),
+					thread.data
+				};
+				thread.code = program.range(thread.code.begin() + A, program.end());
+
+				if (top_thread.code != new_thread.code ||
+					top_thread.data != new_thread.data)
+					vm.threads.push(new_thread);
 
 				return true;
 			}
@@ -127,77 +109,59 @@ namespace rgx
 
 				//get the count
 				thread.code.pop_front();
+				i32 skip_offset = thread.code.front().offset;
+
+				thread.code.pop_front();
 				u32 count = thread.code.front().count;
 
 				//go to the first data
 				thread.code.pop_front();
 
+				auto skipped_thread_code = thread.code.range(thread.code.begin() + skip_offset, thread.code.end());
+
+				bool found = false;
+				Rune next_rune = thread.data.front();
+				for(usize i = 0; i < count; ++i, thread.code.pop_front())
+				{
+					auto& set_code = thread.code.front();
+					if(set_code.type == Bytecode::INST &&
+					   set_code.ins == ISA::RNG)
+					{
+						thread.code.pop_front();
+						Rune start = thread.code.front().data;
+						thread.code.pop_front();
+						Rune end = thread.code.front().data;
+
+						if(next_rune >= start && next_rune <= end)
+						{
+							found = true;
+							break;
+						}
+					}
+					else if(set_code.type == Bytecode::DATA)
+					{
+						if(next_rune == set_code.data)
+						{
+							found = true;
+							break;
+						}
+					}
+				}
+
+				thread.code = skipped_thread_code;
+				//set
 				if(current_ins.ins == ISA::SET)
 				{
-					if(cache)
-					{
-						auto it = cache->lookup(ins_index);
-						if(it != cache->end())
-						{
-							auto& cache_it = it->value;
-							bool result = cache_it.lookup(thread.data.front()) != cache_it.end();
-							if(result)
-								thread.data.pop_front();
-
-							thread.code = thread.code.range(thread.code.begin() + count, thread.code.end());
-							return result;
-						}
-						else
-						{
-							thread.code = thread.code.range(thread.code.begin() + count, thread.code.end());
-							return false;
-						}
-					}
-
-					bool result = false;
-					Rune data = thread.data.front();
-					for(u32 i = 0; i < count; ++i, thread.code.pop_front())
-					{
-						if(!result &&
-						   thread.code.front().data == data)
-						{
-							thread.data.pop_front();
-							result = true;
-						}
-					}
-					return result;
+					if(found == true)
+						thread.data.pop_front();
+					return found;
 				}
-				//NSET
+				//nset
 				else
 				{
-					if(cache)
-					{
-						auto it = cache->lookup(ins_index);
-						if(it != cache->end())
-						{
-							auto& cache_it = it->value;
-							bool result = cache_it.lookup(thread.data.front()) == cache_it.end();
-							if(result)
-								thread.data.pop_front();
-
-							thread.code = thread.code.range(thread.code.begin() + count, thread.code.end());
-							return result;
-						}
-						else
-						{
-							thread.code = thread.code.range(thread.code.begin() + count, thread.code.end());
-							return false;
-						}
-					}
-
-					bool result = true;
-					Rune data = thread.data.front();
-					for(u32 i = 0; i < count; ++i, thread.code.pop_front())
-						if(result && thread.code.front().data == data)
-							result = false;
-					if(result)
+					if(found == false)
 						thread.data.pop_front();
-					return result;
+					return !found;
 				}
 			}
 
@@ -210,8 +174,7 @@ namespace rgx
 
 	bool
 	_run(VM_State& vm, const String_Range& input, const Tape& program,
-		 Match_Result& res, MATCH_MODE mode,
-		 const Cached_Tape::Cache_Type* cache = nullptr)
+		 Match_Result& res, MATCH_MODE mode)
 	{
 		vm.clear();
 		vm.threads._array.reserve(program.count() / 4);
@@ -251,7 +214,7 @@ namespace rgx
 				}
 			
 				//execute the instruction
-				if(!_exec_ins(vm, thread, program, cache))
+				if(!_exec_ins(vm, thread, program))
 					break;
 			}
 		}
@@ -290,31 +253,11 @@ namespace rgx
 	bool
 	run(VM_State& vm,
 		const cppr::String_Range& input,
-		const Cached_Tape& program,
-		Match_Result& res,
-		MATCH_MODE mode)
-	{
-		return _run(vm, input, program.tape, res, mode, &program.cache);
-	}
-
-	bool
-	run(VM_State& vm,
-		const cppr::String_Range& input,
 		const Tape& program,
 		MATCH_MODE mode)
 	{
 		Match_Result res;
 		return _run(vm, input, program, res, mode);
-	}
-
-	bool
-	run(VM_State& vm,
-		const cppr::String_Range& input,
-		const Cached_Tape& program,
-		MATCH_MODE mode)
-	{
-		Match_Result res;
-		return _run(vm, input, program.tape, res, mode, &program.cache);
 	}
 
 
@@ -381,8 +324,7 @@ namespace rgx
 			if(code.type != Bytecode::INST)
 				continue;
 
-			if (code.ins == ISA::SPLT ||
-				code.ins == ISA::SPLT2)
+			if (code.ins == ISA::SPLT)
 			{
 				Gen_Branch splt;
 				splt.address = i;
@@ -466,19 +408,6 @@ namespace rgx
 					vprints(io, "\t\t\tif(state_pointer == STATES_MAX) return false;\n");
 					vprintf(io, "\t\t\tcurrent_state = {};\n", branches.front().blocks[0]->label);
 					vprintf(io, "\t\t\tstates[state_pointer] = {};\n", branches.front().blocks[1]->label);
-					vprints(io, "\t\t\tstates_data[state_pointer] = it;\n");
-					vprints(io, "\t\t\t++state_pointer;\n");
-					fallthrough = false;
-					branches.pop_front();
-					i += 2;
-				}
-				break;
-
-				case ISA::SPLT2:
-				{
-					vprints(io, "\t\t\tif(state_pointer == STATES_MAX) return false;\n");
-					vprintf(io, "\t\t\tcurrent_state = {};\n", branches.front().blocks[1]->label);
-					vprintf(io, "\t\t\tstates[state_pointer] = {};\n", branches.front().blocks[0]->label);
 					vprints(io, "\t\t\tstates_data[state_pointer] = it;\n");
 					vprints(io, "\t\t\t++state_pointer;\n");
 					fallthrough = false;

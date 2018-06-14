@@ -12,10 +12,12 @@ namespace rgx
 	{
 		//invalid instruction
 		NONE = 0,
+
 		//matches a single rune
 		//[RUNE: bytecode::INST]
 		//['c': bytecode::DATA]
 		RUNE,
+
 		//matches a count of runes
 		//[MTCH: bytecode::INST]
 		//[3: bytecode::COUNT]
@@ -23,39 +25,52 @@ namespace rgx
 		//['b': bytecode::DATA]
 		//['c': bytecode::DATA]
 		MTCH,
+
 		//splits the execution of a thread to two threads in different paths but favors the first path (greedy)
 		//[SPLT: bytecode::INST]
 		//[0: bytecode::OFFSET]
 		//[10: bytecode::OFFSET]
 		SPLT,
-		//splits the execution of a thread to two threads in different paths but favors the second path (non greedy)
-		//[SPLT2: bytecode::INST]
-		//[0: bytecode::OFFSET]
-		//[10: bytecode::OFFSET]
-		SPLT2,
+
 		//jumps to the provided offset
 		//[JUMP: bytecode::INST]
 		//[-10: bytecode::OFFSET]
 		JUMP,
+
 		//do set or operation, chooses a single value from the provided list
 		//[SET: bytecode::INST]
+		//[5: bytecode::OFFSET]
 		//[3: bytecode::COUNT]
+		//[RNG: bytecode::INST]
 		//['a': bytecode::DATA]
-		//['b': bytecode::DATA]
-		//['c': bytecode::DATA]
+		//['z': bytecode::DATA]
+		//['_': bytecode::DATA]
+		//['@': bytecode::DATA]
 		SET,
+
 		//do set nor operation, checks if the data is not contained in the provided list
 		//[NSET: bytecode::INST]
 		//[3: bytecode::COUNT]
+		//[RNG: bytecode::INST]
 		//['a': bytecode::DATA]
-		//['b': bytecode::DATA]
-		//['c': bytecode::DATA]
-		//checks that data is not a nor b nor c
+		//['z': bytecode::DATA]
+		//['_': bytecode::DATA]
+		//['@': bytecode::DATA]
+		//checks that data is not a nor b nor c ... z, also that's not `_` or `@`
 		NSET,
+
+		//specify a start and end to the next rune
+		//[RNG: bytecode::INST]
+		//['a': bytecode::DATA]
+		//['z': bytecode::DATA]
+		//specifies the range from a-z
+		RNG,
+
 		//an any data this
 		//[RUNE: bytecode::INST]
 		//[ANY: bytecode::INST]
 		ANY,
+
 		//Stops the program with success
 		//[HALT: bytecode::INST]
 		HALT
@@ -121,18 +136,6 @@ namespace rgx
 
 	using Tape = cppr::Dynamic_Array<Bytecode>;
 
-	struct Cached_Tape
-	{
-		using Cache_Type = cppr::Hash_Map<cppr::usize, cppr::Hash_Set<cppr::Rune>>;
-		Tape tape;
-		Cache_Type cache;
-
-		Cached_Tape(const cppr::Memory_Context& context = cppr::os->global_memory)
-			:tape(context),
-			 cache(context)
-		{}
-	};
-
 	inline static cppr::usize
 	print_str(cppr::IO_Trait* trait, const cppr::Print_Format& format, const ISA& ins)
 	{
@@ -144,14 +147,14 @@ namespace rgx
 				return vprints(trait, "MTCH");
 			case ISA::SPLT:
 				return vprints(trait, "SPLT");
-			case ISA::SPLT2:
-				return vprints(trait, "SPLT2");
 			case ISA::JUMP:
 				return vprints(trait, "JUMP");
 			case ISA::SET:
 				return vprints(trait, "SET");
 			case ISA::NSET:
 				return vprints(trait, "NSET");
+			case ISA::RNG:
+				return vprints(trait, "RNG");
 			case ISA::ANY:
 				return vprints(trait, "ANY");
 			case ISA::HALT:

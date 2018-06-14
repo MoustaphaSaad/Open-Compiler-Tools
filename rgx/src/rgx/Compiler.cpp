@@ -54,6 +54,21 @@ namespace rgx
 	};
 
 	inline static bool
+	_is_operator(byte b)
+	{
+		return (b == '\\' ||
+				b == '|'  ||
+				b == '*'  ||
+				b == '('  ||
+				b == ')'  ||
+				b == '+'  ||
+				b == '?'  ||
+				b == '['  ||
+				b == ']'  ||
+				b == '.'  );
+	}
+
+	inline static bool
 	_is_operator(Rune c)
 	{
 		return (c == '\\' ||
@@ -137,7 +152,7 @@ namespace rgx
 	}
 
 	inline static RGX_ERROR
-	_op_star(Bytecode_Compiler* compiler)
+	_op_star(Bytecode_Compiler* compiler, bool is_greedy)
 	{
 		/**
 		 * bytecode template:
@@ -156,9 +171,18 @@ namespace rgx
 		C.reserve(A.count() + 5);
 
 		C.insert_back(Bytecode::make_ins(ISA::SPLT));
-		C.insert_back(Bytecode::make_offset(0));
-		//+2 for the jump to begin size
-		C.insert_back(Bytecode::make_offset(A.count() + 2));
+		if(is_greedy)
+		{
+			C.insert_back(Bytecode::make_offset(0));
+			//+2 for the jump to begin size
+			C.insert_back(Bytecode::make_offset(A.count() + 2));
+		}
+		else
+		{
+			//+2 for the jump to begin size
+			C.insert_back(Bytecode::make_offset(A.count() + 2));
+			C.insert_back(Bytecode::make_offset(0));
+		}
 
 		//add A
 		C.expand_back_raw(A.count());
@@ -173,125 +197,39 @@ namespace rgx
 	}
 
 	inline static RGX_ERROR
-	_op_star_non_greedy(Bytecode_Compiler* compiler)
-	{
-		/**
-		 * bytecode template:
-		 * [SPLT] [0] [A.count() + 2]
-		 * {A}
-		 * [JUMP] [-(A.count() + 5)]
-		 */
-
-		if(compiler->operands.count() < 1)
-			return RGX_ERROR::OPERANDS_COUNT_MISMATCH;
-
-		Tape A(std::move(compiler->operands.top()));
-		compiler->operands.pop();
-
-		Tape C(compiler->mem_context);
-		C.reserve(A.count() + 5);
-
-		C.insert_back(Bytecode::make_ins(ISA::SPLT2));
-		C.insert_back(Bytecode::make_offset(0));
-		//+2 for the jump to begin size
-		C.insert_back(Bytecode::make_offset(A.count() + 2));
-
-		//add A
-		C.expand_back_raw(A.count());
-		copy<Bytecode>(C.range(3, C.count()), A.all());
-
-		C.insert_back(Bytecode::make_ins(ISA::JUMP));
-		//jump back to the begining the SPLT instruction thus we add +5
-		C.insert_back(Bytecode::make_offset(-1 * (A.count() + 5)));
-
-		compiler->operands.push(std::move(C));
-		return RGX_ERROR::OK;
-	}
-
-	inline static RGX_ERROR
-	_op_plus(Bytecode_Compiler* compiler)
+	_op_plus(Bytecode_Compiler* compiler, bool is_greedy)
 	{
 		/**
 		 * bytecode template: (AA*)
 		 * {A}
-		 * [SPLT] [0] [A.count() + 2]
-		 * {A}
-		 * [JUMP] [-(A.count() + 5)]
+		 * [SPLT] [-(A.count() + 3)] [0]
 		 */
 
 		if(compiler->operands.count() < 1)
 			return RGX_ERROR::OPERANDS_COUNT_MISMATCH;
 
-		Tape A(std::move(compiler->operands.top()));
-		compiler->operands.pop();
+		Tape& A = compiler->operands.top();
 
-		Tape C(compiler->mem_context);
-		C.reserve(2 * A.count() + 5);
+		//+3 for the split ins
+		usize begin_offset = A.count() + 3;
+		A.insert_back(Bytecode::make_ins(ISA::SPLT));
 
-		C.expand_back_raw(A.count());
-		copy<Bytecode>(C.range(0, C.count()), A.all());
+		if(is_greedy)
+		{
+			A.insert_back(Bytecode::make_offset(-begin_offset));
+			A.insert_back(Bytecode::make_offset(0));
+		}
+		else
+		{
+			A.insert_back(Bytecode::make_offset(0));
+			A.insert_back(Bytecode::make_offset(-begin_offset));
+		}
 
-		C.insert_back(Bytecode::make_ins(ISA::SPLT));
-		C.insert_back(Bytecode::make_offset(0));
-		//+2 for the jump to begin size
-		C.insert_back(Bytecode::make_offset(A.count() + 2));
-
-		//add A
-		usize c_count = C.count();
-		C.expand_back_raw(A.count());
-		copy<Bytecode>(C.range(c_count, C.count()), A.all());
-
-		C.insert_back(Bytecode::make_ins(ISA::JUMP));
-		//jump back to the begining the SPLT instruction thus we add +5
-		C.insert_back(Bytecode::make_offset(-1 * (A.count() + 5)));
-
-		compiler->operands.push(std::move(C));
 		return RGX_ERROR::OK;
 	}
 
 	inline static RGX_ERROR
-	_op_plus_non_greedy(Bytecode_Compiler* compiler)
-	{
-		/**
-		 * bytecode template: (AA*)
-		 * {A}
-		 * [SPLT] [0] [A.count() + 2]
-		 * {A}
-		 * [JUMP] [-(A.count() + 5)]
-		 */
-
-		if(compiler->operands.count() < 1)
-			return RGX_ERROR::OPERANDS_COUNT_MISMATCH;
-
-		Tape A(std::move(compiler->operands.top()));
-		compiler->operands.pop();
-
-		Tape C(compiler->mem_context);
-		C.reserve(2 * A.count() + 5);
-
-		C.expand_back_raw(A.count());
-		copy<Bytecode>(C.range(0, C.count()), A.all());
-
-		C.insert_back(Bytecode::make_ins(ISA::SPLT2));
-		C.insert_back(Bytecode::make_offset(0));
-		//+2 for the jump to begin size
-		C.insert_back(Bytecode::make_offset(A.count() + 2));
-
-		//add A
-		usize c_count = C.count();
-		C.expand_back_raw(A.count());
-		copy<Bytecode>(C.range(c_count, C.count()), A.all());
-
-		C.insert_back(Bytecode::make_ins(ISA::JUMP));
-		//jump back to the begining the SPLT instruction thus we add +5
-		C.insert_back(Bytecode::make_offset(-1 * (A.count() + 5)));
-
-		compiler->operands.push(std::move(C));
-		return RGX_ERROR::OK;
-	}
-
-	inline static RGX_ERROR
-	_op_optional(Bytecode_Compiler* compiler)
+	_op_optional(Bytecode_Compiler* compiler, bool is_greedy)
 	{
 		/**
 		 * bytecode template:
@@ -309,37 +247,16 @@ namespace rgx
 		C.reserve(A.count() + 3);
 
 		C.insert_back(Bytecode::make_ins(ISA::SPLT));
-		C.insert_back(Bytecode::make_offset(0));
-		C.insert_back(Bytecode::make_offset(A.count()));
-
-		C.expand_back_raw(A.count());
-		copy<Bytecode>(C.range(3, C.count()), A.all());
-
-		compiler->operands.push(std::move(C));
-		return RGX_ERROR::OK;
-	}
-
-	inline static RGX_ERROR
-	_op_optional_non_greedy(Bytecode_Compiler* compiler)
-	{
-		/**
-		 * bytecode template:
-		 * [SPLT2] [0] [A.count()]
-		 * {A}
-		 */
-
-		if(compiler->operands.count() < 1)
-			return RGX_ERROR::OPERANDS_COUNT_MISMATCH;
-
-		Tape A(std::move(compiler->operands.top()));
-		compiler->operands.pop();
-
-		Tape C(compiler->mem_context);
-		C.reserve(A.count() + 3);
-
-		C.insert_back(Bytecode::make_ins(ISA::SPLT2));
-		C.insert_back(Bytecode::make_offset(0));
-		C.insert_back(Bytecode::make_offset(A.count()));
+		if(is_greedy)
+		{
+			C.insert_back(Bytecode::make_offset(0));
+			C.insert_back(Bytecode::make_offset(A.count()));
+		}
+		else
+		{
+			C.insert_back(Bytecode::make_offset(A.count()));
+			C.insert_back(Bytecode::make_offset(0));
+		}
 
 		C.expand_back_raw(A.count());
 		copy<Bytecode>(C.range(3, C.count()), A.all());
@@ -365,22 +282,22 @@ namespace rgx
 				return _op_or(compiler);
 
 			case rgx::OPERATORS::STAR:
-				return _op_star(compiler);
+				return _op_star(compiler, true);
 
 			case rgx::OPERATORS::STAR_NON_GREEDY:
-				return _op_star_non_greedy(compiler);
+				return _op_star(compiler, false);
 
 			case rgx::OPERATORS::PLUS:
-				return _op_plus(compiler);
+				return _op_plus(compiler, true);
 
 			case rgx::OPERATORS::PLUS_NON_GREEDY:
-				return _op_plus_non_greedy(compiler);
+				return _op_plus(compiler, false);
 
 			case rgx::OPERATORS::OPTIONAL:
-				return _op_optional(compiler);
+				return _op_optional(compiler, true);
 
 			case rgx::OPERATORS::OPTIONAL_NON_GREEDY:
-				return _op_optional_non_greedy(compiler);
+				return _op_optional(compiler, false);
 		}
 		return RGX_ERROR::GENERIC_ERROR;
 	}
@@ -469,7 +386,7 @@ namespace rgx
 				++rgx_it;
 				continue;
 			}
-			//if found * and we are not in ignore state then add the plus op
+			//if found + and we are not in ignore state then add the plus op
 			else if(c == '+' && !compiler->ignore)
 			{
 				//check to see if it's greedy operator
@@ -581,8 +498,12 @@ namespace rgx
 				//create a new block
 				Tape block(compiler->mem_context);
 				block.insert_back(Bytecode::make_ins(ISA::SET));
+				//set a placeholder offset
+				block.insert_back(Bytecode::make_offset(0));
 				//set a placeholder count
 				block.insert_back(Bytecode::make_count(0));
+
+				usize set_element_count = 0;
 
 				++rgx_it;
 				c = *rgx_it;
@@ -639,12 +560,9 @@ namespace rgx
 						}
 
 						//continue adding the runes
-						block.reserve(end.data - start.data);
-						do
-						{
-							++start.data;
-							block.insert_back(Bytecode::make_data(start));
-						}while(start != end);
+						block.back() = Bytecode::make_ins(ISA::RNG);
+						block.insert_back(Bytecode::make_data(start));
+						block.insert_back(Bytecode::make_data(end));
 
 						local_ignore = false;
 					}
@@ -652,6 +570,7 @@ namespace rgx
 					else
 					{
 						block.insert_back(Bytecode::make_data(c));
+						++set_element_count;
 						local_ignore = false;
 					}
 
@@ -663,8 +582,11 @@ namespace rgx
 				if(c != ']')
 					return RGX_ERROR::SET_CLOSE_BRACKET_NOT_FOUND;
 
+				//adjust the offset
+				//-3 for the first [SET, OFFSET, COUNT]
+				block[1] = Bytecode::make_offset(block.count() - 3);
 				//adjust the count
-				block[1] = Bytecode::make_count(block.count() - 2);
+				block[2] = Bytecode::make_count(set_element_count);
 				//push the block
 				compiler->operands.emplace(std::move(block));
 
@@ -726,9 +648,6 @@ namespace rgx
 	void
 	_optimize_tape(const Tape& input, Tape& output, const Memory_Context& context);
 
-	void
-	_optimize_tape(const Tape& input, Cached_Tape& output, const Memory_Context& context);
-
 	RGX_ERROR
 	compile(const String_Range& expression,
 			Tape& program, bool optimize,
@@ -749,397 +668,12 @@ namespace rgx
 		}
 		else
 		{
-			program = std::move(compiler.operands.top());
+			program = compiler.operands.top();
 			compiler.operands.pop();
 		}
 
 		return RGX_ERROR::OK;
 	}
-
-	RGX_ERROR
-	compile(const String_Range& expression,
-			Cached_Tape& program, bool optimize,
-			const Memory_Context& context)
-	{
-		Bytecode_Compiler compiler(context);
-
-		RGX_ERROR compiler_result = _compile(expression, &compiler);
-		if(compiler_result != RGX_ERROR::OK)
-			return compiler_result;
-
-		//add the halt command at the end of the program
-		compiler.operands.top().insert_back(Bytecode::make_ins(ISA::HALT));
-
-		if(optimize)
-		{
-			_optimize_tape(compiler.operands.top(), program, context);
-		}
-		else
-		{
-			program.tape = std::move(compiler.operands.top());
-			compiler.operands.pop();
-		}
-
-		return RGX_ERROR::OK;
-	}
-
-	//New Compile
-	struct NFA_Node
-	{
-		enum TYPE { SPLT = 256, HALT = 257 };
-
-		i32 data;
-		NFA_Node* branches[2] = { nullptr };
-	};
-
-	struct NFA
-	{
-		NFA_Node* start_state;
-		Double_List<NFA_Node*> end_states;
-
-		NFA(const Memory_Context& context = os->global_memory)
-			:end_states(context)
-		{}
-	};
-
-	struct NFA_Compiler
-	{
-		Arena_Allocator node_arena;
-		Stack_Array<NFA*> operands;
-		Stack_Array<OPERATORS> operators;
-
-		bool ignore;
-		bool recommend_concat;
-
-		NFA_Compiler(const Memory_Context& context = os->global_memory)
-			:node_arena(context),
-			 operands(context),
-			 operators(context),
-			 ignore(false),
-			 recommend_concat(false)
-		{
-			node_arena.block_size = KILOBYTES(4);
-		}
-
-		NFA*
-		nfa_create()
-		{
-			NFA* result = node_arena.template alloc<NFA>().ptr;
-			::new (result) NFA(node_arena);
-			return result;
-		}
-
-		NFA_Node*
-		nfa_node_create()
-		{
-			NFA_Node* res = node_arena.template alloc<NFA_Node>().ptr;
-			::new (res) NFA_Node();
-			return res;
-		}
-	};
-
-	inline static RGX_ERROR
-	_op_concat(NFA_Compiler& compiler)
-	{
-		if(compiler.operands.count() < 2)
-			return RGX_ERROR::OPERANDS_COUNT_MISMATCH;
-
-		NFA* B = compiler.operands.top();
-		compiler.operands.pop();
-
-		NFA* A = compiler.operands.top();
-		compiler.operands.pop();
-
-		for(auto out_node: A->end_states)
-			out_node->branches[0] = B->start_state;
-		
-		A->end_states = std::move(B->end_states);
-		compiler.operands.push(A);
-		return RGX_ERROR::OK;
-	}
-
-	inline static RGX_ERROR
-	_op_or(NFA_Compiler& compiler)
-	{
-		if(compiler.operands.count() < 2)
-			return RGX_ERROR::OPERANDS_COUNT_MISMATCH;
-
-		NFA* B = compiler.operands.top();
-		compiler.operands.pop();
-
-		NFA* A = compiler.operands.top();
-		compiler.operands.pop();
-
-		NFA_Node* or_node = compiler.nfa_node_create();
-		or_node->data = NFA_Node::SPLT;
-		or_node->branches[0] = A->start_state;
-		or_node->branches[1] = B->start_state;
-		A->start_state = or_node;
-		for(const auto& node: B->end_states)
-			A->end_states.insert_back(node);
-
-		compiler.operands.push(A);
-		return RGX_ERROR::OK;
-	}
-
-	inline static RGX_ERROR
-	_op_star(NFA_Compiler& compiler)
-	{
-		if(compiler.operands.count() < 1)
-			return RGX_ERROR::OPERANDS_COUNT_MISMATCH;
-		
-		NFA* A = compiler.operands.top();
-		compiler.operands.pop();
-
-		NFA_Node* star_node = compiler.nfa_node_create();
-		star_node->data = NFA_Node::SPLT;
-		star_node->branches[0] = A->start_state;
-		for(auto n: A->end_states)
-			n->branches[0] = star_node;
-		A->end_states.clear();
-		A->end_states.insert_back(star_node);
-		A->start_state = star_node;
-
-		compiler.operands.push(A);
-		return RGX_ERROR::OK;
-	}
-
-	inline static RGX_ERROR
-	_eval_op(NFA_Compiler& compiler)
-	{
-		if(compiler.operators.empty())
-			return RGX_ERROR::EVAL_NO_OPERATOR;
-		
-		auto op = compiler.operators.top();
-		compiler.operators.pop();
-		switch(op)
-		{
-			case OPERATORS::CONCAT:
-				return _op_concat(compiler);
-
-			case OPERATORS::OR:
-				return _op_or(compiler);
-
-			case OPERATORS::STAR:
-				return _op_star(compiler);
-
-			default:
-				return RGX_ERROR::GENERIC_ERROR;
-		}
-	}
-
-	inline static RGX_ERROR
-	_push_op(NFA_Compiler& compiler, OPERATORS op)
-	{
-		while(!compiler.operators.empty() &&
-			  compiler.operators.top() >= op)
-		{
-			RGX_ERROR res = _eval_op(compiler);
-			if(res != RGX_ERROR::OK) return res;
-		}
-
-		compiler.operators.push(op);
-		return RGX_ERROR::OK;
-	}
-
-	inline static RGX_ERROR
-	_handle_state(NFA_Compiler& compiler)
-	{
-		if(compiler.recommend_concat)
-		{
-			//push a concat operation
-			RGX_ERROR res = _push_op(compiler, OPERATORS::CONCAT);
-			if(res != RGX_ERROR::OK) return res;
-			compiler.recommend_concat = false;
-		}
-		return RGX_ERROR::OK;
-	}
-
-	RGX_ERROR
-	compile_2(const String_Range& expression)
-	{
-		NFA_Compiler compiler;
-		auto rgx_start = expression.bytes.begin();
-		auto rgx_end = expression.bytes.end();
-
-		for(auto it = rgx_start;
-			it != rgx_end;
-			++it)
-		{
-			auto b = *it;
-			if(!compiler.ignore)
-			{
-				switch(b)
-				{
-					case '\\':
-					{
-						compiler.ignore = true;
-					}
-						break;
-
-					case '|':
-					{
-						RGX_ERROR res = _push_op(compiler, OPERATORS::OR);
-						if(res != RGX_ERROR::OK) return res;
-						compiler.ignore = false;
-						compiler.recommend_concat = false;
-					}
-						break;
-
-					case '*':
-					{
-						OPERATORS op = OPERATORS::STAR;
-						auto maybe_nongreedy = it + 1;
-						if (maybe_nongreedy != rgx_end &&
-							*maybe_nongreedy == '?')
-						{
-							op = OPERATORS::STAR_NON_GREEDY;
-							it = maybe_nongreedy;
-						}
-
-						RGX_ERROR res = _push_op(compiler, op);
-						if(res != RGX_ERROR::OK) return res;
-						compiler.ignore = false;
-						compiler.recommend_concat = true;
-					}
-						break;
-
-					case '+':
-					{
-						OPERATORS op = OPERATORS::PLUS;
-						auto maybe_nongreedy = it + 1;
-						if (maybe_nongreedy != rgx_end &&
-							*maybe_nongreedy == '?')
-						{
-							op = OPERATORS::PLUS_NON_GREEDY;
-							it = maybe_nongreedy;
-						}
-
-						RGX_ERROR res = _push_op(compiler, op);
-						if(res != RGX_ERROR::OK) return res;
-						compiler.ignore = false;
-						compiler.recommend_concat = true;
-					}
-						break;
-
-					case '?':
-					{
-						OPERATORS op = OPERATORS::OPTIONAL;
-						auto maybe_nongreedy = it + 1;
-						if (maybe_nongreedy != rgx_end &&
-							*maybe_nongreedy == '?')
-						{
-							op = OPERATORS::OPTIONAL_NON_GREEDY;
-							it = maybe_nongreedy;
-						}
-
-						RGX_ERROR res = _push_op(compiler, op);
-						if(res != RGX_ERROR::OK) return res;
-						compiler.ignore = false;
-						compiler.recommend_concat = true;
-					}
-						break;
-
-					case '.':
-					{
-
-					}
-						break;
-
-					case '(':
-					{
-						RGX_ERROR res = _handle_state(compiler);
-						if(res != RGX_ERROR::OK) return res;
-
-						compiler.operators.push(OPERATORS::OPEN_PAREN);
-
-						compiler.ignore = false;
-						compiler.recommend_concat = false;
-					}
-						break;
-
-					case ')':
-					{
-						while(!compiler.operators.empty() && compiler.operators.top() != OPERATORS::OPEN_PAREN)
-						{
-							RGX_ERROR res = _eval_op(compiler);
-							if(res != RGX_ERROR::OK) return res;
-						}
-
-						compiler.operators.pop();
-
-						compiler.ignore = false;
-						compiler.recommend_concat = true;
-					}
-						break;
-
-					default:
-					{
-						RGX_ERROR res = _handle_state(compiler);
-						if(res != RGX_ERROR::OK) return res;
-
-						NFA* nfa = compiler.nfa_create();
-
-						NFA_Node* node = compiler.nfa_node_create();
-						node->data = b;
-						nfa->start_state = node;
-
-						NFA_Node* prev = node;
-						for(++it; !_is_operator(*it) && it != rgx_end; ++it)
-						{
-							NFA_Node* new_node = compiler.nfa_node_create();
-							new_node->data = *it;
-							prev->branches[0] = new_node;
-							prev = new_node;
-						}
-						--it;
-
-						nfa->end_states.insert_back(prev);
-						compiler.operands.push(nfa);
-
-						compiler.ignore = false;
-						compiler.recommend_concat = true;
-					}
-						break;
-				}
-			}
-			else
-			{
-				RGX_ERROR res = _handle_state(compiler);
-				if(res != RGX_ERROR::OK) return res;
-
-				NFA* nfa = compiler.nfa_create();
-
-				NFA_Node* node = compiler.nfa_node_create();
-				node->data = b;
-				nfa->start_state = node;
-
-				NFA_Node* prev = node;
-				for(++it; !_is_operator(*it) && it != rgx_end; ++it)
-				{
-					NFA_Node* new_node = compiler.nfa_node_create();
-					new_node->data = *it;
-					prev->branches[0] = new_node;
-					prev = new_node;
-				}
-
-				nfa->end_states.insert_back(prev);
-				compiler.operands.push(nfa);
-
-				compiler.ignore = false;
-				compiler.recommend_concat = true;
-			}
-		}
-
-		while(!compiler.operators.empty())
-		{
-			RGX_ERROR res = _eval_op(compiler);
-			if(res != RGX_ERROR::OK) return res;
-		}
-
-		return RGX_ERROR::OK;
-	}
-
 
 	//optimization code
 	struct Seq_Block
@@ -1211,8 +745,7 @@ namespace rgx
 			if(code.type != Bytecode::INST)
 				continue;
 
-			if (code.ins == ISA::SPLT ||
-				code.ins == ISA::SPLT2)
+			if (code.ins == ISA::SPLT)
 			{
 				Branch splt;
 				splt.address = i;
@@ -1243,8 +776,7 @@ namespace rgx
 	}
 
 	inline static void
-	_optimize_block(const Tape& input, Tape& output, Seq_Block& block,
-					Slice<Branch>& branches, Cached_Tape::Cache_Type* cache = nullptr)
+	_optimize_block(const Tape& input, Tape& output, Seq_Block& block, Slice<Branch>& branches)
 	{
 		usize old_count = output.count();
 		usize block_extent = block.address + block.count;
@@ -1297,30 +829,6 @@ namespace rgx
 				branches.pop_front();
 				output.insert_back(input[i]);
 			}
-			else if(cache != nullptr &&
-					input[i].type == Bytecode::INST &&
-					(input[i].ins == ISA::SET ||
-					 input[i].ins == ISA::NSET))
-			{
-				//insert the set or nset instruction
-				output.insert_back(input[i]);
-				//get the count instruction
-				++i;
-				output.insert_back(input[i]);
-				auto& cache_it = cache->insert(i - 1, cppr::Hash_Set<Rune>(cache->mem_context))->value;
-				usize runes_count = input[i].count;
-				cache_it.reserve(runes_count * 2);
-
-				//start with the letters
-				++i;
-				for(usize j = 0; j < runes_count; ++j, ++i)
-				{
-					output.insert_back(input[i]);
-					cache_it.insert(input[i].data);
-				}
-				//for the outer loop consistancy
-				--i;
-			}
 			else
 			{
 				output.insert_back(input[i]);
@@ -1331,14 +839,13 @@ namespace rgx
 	}
 
 	inline static void
-	_write_optimized_blocks(Optimizer& optimizer, const Tape& input, Tape& output,
-							Cached_Tape::Cache_Type* cache = nullptr)
+	_write_optimized_blocks(Optimizer& optimizer, const Tape& input, Tape& output)
 	{
 		auto branches = optimizer.branches.all();
 		for(auto& block: optimizer.blocks)
 		{
 			block.new_address = output.count();
-			_optimize_block(input, output, block, branches, cache);
+			_optimize_block(input, output, block, branches);
 		}
 	}
 
@@ -1350,7 +857,6 @@ namespace rgx
 			switch(branch.ins)
 			{
 				case ISA::SPLT:
-				case ISA::SPLT2:
 				{
 					//fix the branches
 					//+3 for the size of the splt instruction
@@ -1412,48 +918,5 @@ namespace rgx
 
 		//fix the branches addresses
 		_branches_fixup(optimizer, output);
-	}
-
-	void
-	_optimize_tape(const Tape& input, Cached_Tape& output, const Memory_Context& context)
-	{
-		/**
-		 * The optimization techniques is simple we need to compress the:
-		 * Rune
-		 * a
-		 * Rune
-		 * b
-		 * Rune
-		 * c
-		 * 
-		 * to:
-		 * MTCH
-		 * 3
-		 * a
-		 * b
-		 * c
-		 * 
-		 * This involves detecting branching and split the code to blocks then optimize the blocks
-		 * individually
-		 * Also we need to build the cache for the set instructions
-		 */
-
-		output.tape.reserve(input.count());
-		Optimizer optimizer(context);
-
-		//init the entire program as a single big block
-		Seq_Block global_block;
-		global_block.address = 0;
-		global_block.count = input.count();
-		optimizer.blocks.insert_back(global_block);
-
-		//extract the branchs and split the above single big block
-		_detect_branches_and_split_blocks(optimizer, input);
-
-		//write the optimized blocks
-		_write_optimized_blocks(optimizer, input, output.tape, &output.cache);
-
-		//fix the branches addresses
-		_branches_fixup(optimizer, output.tape);
 	}
 }
