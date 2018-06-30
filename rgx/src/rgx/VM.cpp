@@ -1,6 +1,7 @@
 #include "rgx/VM.h"
 #include <cpprelude/Dynamic_Array.h>
 #include <cpprelude/Double_List.h>
+#include <cpprelude/Panic.h>
 
 using namespace cppr;
 
@@ -104,7 +105,6 @@ namespace rgx
 				if(thread.data.empty())
 					return false;
 
-				usize ins_index = thread.code.begin() - program.begin();
 				auto current_ins = thread.code.front();
 
 				//get the count
@@ -163,6 +163,14 @@ namespace rgx
 						thread.data.pop_front();
 					return !found;
 				}
+			}
+
+			case ISA::PUSH:
+			{
+				thread.code.pop_front();
+				vm.stack.emplace_back(thread.code.front().value);
+				thread.code.pop_front();
+				return true;
 			}
 
 			case ISA::HALT:
@@ -260,9 +268,8 @@ namespace rgx
 		return _run(vm, input, program, res, mode);
 	}
 
-
-
 	//CPP code gen
+	/*
 	struct Gen_Block
 	{
 		usize address = 0, count = 0, label = -1;
@@ -501,7 +508,6 @@ namespace rgx
 	_emit_program(IO_Trait* io, CPP_Generator& gen, const Tape& program)
 	{
 		auto branches = gen.branches.all();
-		usize count = 0;
 		for(auto& block: gen.blocks)
 		{
 			_emit_block(io, program, block, branches);
@@ -558,4 +564,5 @@ namespace rgx
 		vprints(io, "}\n");
 		return true;
 	}
+	*/
 }

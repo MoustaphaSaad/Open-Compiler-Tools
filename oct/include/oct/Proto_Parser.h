@@ -8,7 +8,7 @@ namespace oct
 {
 	struct Proto_Parser
 	{
-		using Peek_Context_Type = cppr::usize;
+		using Peek_Context_Type = usize;
 
 		cppr::Memory_Context mem_context;
 		cppr::Ring_Array<Token> token_buffer;
@@ -31,14 +31,14 @@ namespace oct
 		API_OCT bool
 		token_flush(Peek_Context_Type& context);
 
-		API_OCT cppr::usize
-		token_skip(cppr::String_Range& stream, cppr::usize count = 1);
+		API_OCT usize
+		token_skip(cppr::String_Range& stream, usize count = 1);
 
 		API_OCT bool
-		token_expect(cppr::String_Range& stream, cppr::u32 token_type);
+		token_expect(cppr::String_Range& stream, u32 token_type);
 
 		API_OCT bool
-		token_expect(cppr::String_Range& stream, cppr::u32 token_type, Token& token);
+		token_expect(cppr::String_Range& stream, u32 token_type, Token& token);
 
 		API_OCT bool
 		token_expect(cppr::String_Range& stream, Token& token);

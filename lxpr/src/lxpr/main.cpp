@@ -35,11 +35,11 @@ get_file_content(const String_Range& filename)
 void
 debug()
 {
-	String content = get_file_content("tests/test04.json"_rng);
+	String content = get_file_content("../../grammars/json.lxpr"_rng);
 	auto content_range = content.all();
 
 	Proto_Lexer lexer;
-	json::lexer_create(lexer);
+	lxpr::meta_lexer_create(lexer);
 
 	Stopwatch watch;
 	usize count = 0;
@@ -47,7 +47,31 @@ debug()
 	Token tkn;
 	while(lexer.token(content_range, tkn))
 	{
-		cppr::printf("token id: {}, token str: <{}>\n", tkn.type, tkn.str);
+		//printfmt("token id: {}, token str: <{}>\n", tkn.type, tkn.str);
+		count++;
+	}
+	watch.stop();
+	println("token count: ", count);
+	println("lexing time: ", watch.milliseconds(), "ms");
+}
+
+void
+debug_2()
+{
+	String content = get_file_content("../../grammars/json.lxpr"_rng);
+	auto content_range = content.all();
+
+	Proto_Lexer2 lexer;
+	lxpr::meta_lexer_create_2(lexer);
+	//pretty_print(lexer.single_tape);
+
+	Stopwatch watch;
+	usize count = 0;
+	watch.start();
+	Token tkn;
+	while(lexer.token(content_range, tkn))
+	{
+		//printfmt("token id: {}, token str: <{}>\n", tkn.type, tkn.str);
 		count++;
 	}
 	watch.stop();
@@ -59,6 +83,7 @@ i32
 main(i32 argc, byte **argv)
 {
 	debug();
+	debug_2();
 	return 0;
 	if(argc <= 1)
 		panic("Please provide a file name"_rng);
@@ -104,15 +129,15 @@ main(i32 argc, byte **argv)
 	}
 	watch.stop();
 
-	cppr::printf("result: {}\n", result);
-	cppr::printf("parsing took {}ms\n", watch.milliseconds());
+	printfmt("result: {}\n", result);
+	printfmt("parsing took {}ms\n", watch.milliseconds());
 
 	watch.start();
 	{
 		meta_gen(output_folder.all(), parsed_program);
 	}
 	watch.stop();
-	cppr::printf("lxpr took {}ms\n", watch.milliseconds());
+	printfmt("lxpr took {}ms\n", watch.milliseconds());
 	//println(output.str_content());
 	//println(make_strrng(output._buffer.range(0, output._cursor).convert<const byte>()));
 	return 0;

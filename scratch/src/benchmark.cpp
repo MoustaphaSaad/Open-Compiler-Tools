@@ -1,6 +1,7 @@
 #include "benchmark.h"
 
 #include <rgx/Compiler.h>
+#include <rgx/Optimizer.h>
 #include <rgx/VM.h>
 #include <oct/Proto_Lexer.h>
 #include <oct/Proto_Parser.h>
@@ -318,15 +319,15 @@ debug()
 {
 	Tape exp(rgx_stack);
 	VM_State vm(rgx_stack);
-	compile("[a-zA-Z]"_rng, exp, true, rgx_stack);
-	println(exp);
+	compile("[a-zA-Z]|bc"_rng, exp, true, rgx_stack);
+	pretty_print(exp);
 }
 
 void
 benchmark()
 {
 	debug();
-	//return;
+	return;
 	srand(time(0));
 
 	rand_data();

@@ -8,9 +8,18 @@
 #include <cpprelude/OS.h>
 #include <cpprelude/Ranges.h>
 #include <cpprelude/IO_Trait.h>
+#include <cpprelude/Loom.h>
+#include <atomic>
 
 namespace rgx
 {
+	enum class MATCH_MODE
+	{
+		FIRST_MATCH,
+		SHORTEST_MATCH,
+		LONGEST_MATCH
+	};
+
 	struct Thread_State
 	{
 		Tape::Const_Range_Type code;
@@ -28,11 +37,13 @@ namespace rgx
 		cppr::Memory_Context mem_context;
 		cppr::Stack_Array<Thread_State> threads;
 		cppr::Dynamic_Array<cppr::String_Range> matches;
+		cppr::Dynamic_Array<i32> stack;
 
 		VM_State(const cppr::Memory_Context& context = cppr::os->global_memory)
 			:mem_context(context),
 			 threads(mem_context),
-			 matches(mem_context)
+			 matches(mem_context),
+			 stack(mem_context)
 		{}
 
 		void
@@ -40,14 +51,8 @@ namespace rgx
 		{
 			threads.clear();
 			matches.clear();
+			stack.clear();
 		}
-	};
-
-	enum class MATCH_MODE
-	{
-		FIRST_MATCH,
-		SHORTEST_MATCH,
-		LONGEST_MATCH
 	};
 
 	API_RGX bool
@@ -62,7 +67,4 @@ namespace rgx
 		const cppr::String_Range& input,
 		const Tape& program,
 		MATCH_MODE mode = MATCH_MODE::FIRST_MATCH);
-
-	API_RGX bool
-	cpp_gen(cppr::IO_Trait* io, const Tape& program);
 }

@@ -4,7 +4,7 @@
 #include <oct/Proto_Parser.h>
 namespace json
 {
-	enum TOKENS: cppr::u32
+	enum TOKENS: u32
 	{
 		TOKEN_NONE,
 		T_WHITESPACE,
