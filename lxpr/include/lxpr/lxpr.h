@@ -40,9 +40,6 @@ namespace lxpr
 
 	bool
 	meta_lexer_create(oct::Proto_Lexer& lexer);
-
-	bool
-	meta_lexer_create_2(oct::Proto_Lexer2& lexer);
 	
 	//parser part
 	struct Lxpr_Token_Node

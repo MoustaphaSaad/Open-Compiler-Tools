@@ -326,12 +326,12 @@ debug()
 void
 benchmark()
 {
-	debug();
-	return;
+	//debug();
+	//return;
 	srand(time(0));
 
 	rand_data();
-	corpse_index = 15;
+	//corpse_index = 15;
 	println(corpse_index);
 	println(corpse[corpse_index]);
 	

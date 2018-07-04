@@ -8,177 +8,192 @@ using namespace cppr;
 namespace rgx
 {
 	inline static bool
-	_exec_ins(VM_State& vm, Thread_State& thread, const Tape& program)
+	_ins_error(VM_State& vm, Thread_State& thread, const Tape& program)
 	{
-		switch(thread.code.front().ins)
+		return false;
+	}
+
+	inline static bool
+	_ins_rune(VM_State& vm, Thread_State& thread, const Tape& program)
+	{
+		//check if data is empty
+		if(thread.data.empty())
+			return false;
+
+		thread.code.pop_front();
+
+		//handle the any instruction
+		if(thread.code.front().type == Bytecode::INST &&
+			thread.code.front().ins == ISA::ANY)
 		{
-			case ISA::RUNE:
-			{
-				//check if data is empty
-				if(thread.data.empty())
-					return false;
+			thread.code.pop_front();
+			thread.data.pop_front();
+			return true;
+		}
+		//compare the expected data with the actual data
+		else if(thread.code.front().data == thread.data.front())
+		{
+			thread.code.pop_front();
+			thread.data.pop_front();
+			return true;
+		}
 
-				thread.code.pop_front();
+		return false;
+	}
 
-				//handle the any instruction
-				if(thread.code.front().type == Bytecode::INST &&
-				   thread.code.front().ins == ISA::ANY)
-				{
-					thread.code.pop_front();
-					thread.data.pop_front();
-					return true;
-				}
-				//compare the expected data with the actual data
-				else if(thread.code.front().data == thread.data.front())
-				{
-					thread.code.pop_front();
-					thread.data.pop_front();
-					return true;
-				}
+	inline static bool
+	_ins_mtch(VM_State& vm, Thread_State& thread, const Tape& program)
+	{
+		//check if data pointer haven't reached the end of data
+		if(thread.data.empty())
+			return false;
 
+		thread.code.pop_front();
+		u32 count = thread.code.front().count;
+
+		thread.code.pop_front();
+		for(u32 i = 0; i < count; ++i)
+		{
+			if(thread.data.empty() ||
+				thread.code.front().data != thread.data.front())
 				return false;
-			}
 
-			case ISA::MTCH:
+			thread.code.pop_front();
+			thread.data.pop_front();
+		}
+		return true;
+	}
+
+	inline static bool
+	_ins_splt(VM_State& vm, Thread_State& thread, const Tape& program)
+	{
+		//get the first branch
+		thread.code.pop_front();
+		i32 A = thread.code.front().offset;
+
+		//get the second branch
+		thread.code.pop_front();
+		i32 B = thread.code.front().offset;
+
+		thread.code.pop_front();
+
+		auto& top_thread = vm.threads.top();
+		Thread_State new_thread
+		{
+			program.range(thread.code.begin() + B, program.end()),
+			thread.data
+		};
+		thread.code = program.range(thread.code.begin() + A, program.end());
+
+		if (top_thread.code != new_thread.code ||
+			top_thread.data != new_thread.data)
+			vm.threads.push(new_thread);
+
+		return true;
+	}
+
+	inline static bool
+	_ins_jump(VM_State& vm, Thread_State& thread, const Tape& program)
+	{
+		//get the offset
+		thread.code.pop_front();
+		i32 offset = thread.code.front().offset;
+		thread.code.pop_front();
+
+		thread.code = program.range(thread.code.begin() + offset, program.end());
+		return true;
+	}
+
+	inline static bool
+	_ins_set(VM_State& vm, Thread_State& thread, const Tape& program)
+	{
+		if(thread.data.empty())
+			return false;
+
+		auto current_ins = thread.code.front();
+
+		//get the count
+		thread.code.pop_front();
+		i32 skip_offset = thread.code.front().offset;
+
+		thread.code.pop_front();
+		u32 count = thread.code.front().count;
+
+		//go to the first data
+		thread.code.pop_front();
+
+		auto skipped_thread_code = thread.code.range(thread.code.begin() + skip_offset, thread.code.end());
+
+		bool found = false;
+		Rune next_rune = thread.data.front();
+		for(usize i = 0; i < count; ++i, thread.code.pop_front())
+		{
+			auto& set_code = thread.code.front();
+			if(set_code.type == Bytecode::INST &&
+				set_code.ins == ISA::RNG)
 			{
-				//check if data pointer haven't reached the end of data
-				if(thread.data.empty())
-					return false;
-
 				thread.code.pop_front();
-				u32 count = thread.code.front().count;
-
+				Rune start = thread.code.front().data;
 				thread.code.pop_front();
-				for(u32 i = 0; i < count; ++i)
+				Rune end = thread.code.front().data;
+
+				if(next_rune >= start && next_rune <= end)
 				{
-					if(thread.data.empty() ||
-					   thread.code.front().data != thread.data.front())
-						return false;
-
-					thread.code.pop_front();
-					thread.data.pop_front();
-				}
-				return true;
-			}
-
-			case ISA::SPLT:
-			{
-				//get the first branch
-				thread.code.pop_front();
-				i32 A = thread.code.front().offset;
-
-				//get the second branch
-				thread.code.pop_front();
-				i32 B = thread.code.front().offset;
-
-				thread.code.pop_front();
-
-				auto& top_thread = vm.threads.top();
-				Thread_State new_thread
-				{
-					program.range(thread.code.begin() + B, program.end()),
-					thread.data
-				};
-				thread.code = program.range(thread.code.begin() + A, program.end());
-
-				if (top_thread.code != new_thread.code ||
-					top_thread.data != new_thread.data)
-					vm.threads.push(new_thread);
-
-				return true;
-			}
-
-			case ISA::JUMP:
-			{
-				//get the offset
-				thread.code.pop_front();
-				i32 offset = thread.code.front().offset;
-				thread.code.pop_front();
-
-				thread.code = program.range(thread.code.begin() + offset, program.end());
-				return true;
-			}
-
-			case ISA::NSET:
-			case ISA::SET:
-			{
-				if(thread.data.empty())
-					return false;
-
-				auto current_ins = thread.code.front();
-
-				//get the count
-				thread.code.pop_front();
-				i32 skip_offset = thread.code.front().offset;
-
-				thread.code.pop_front();
-				u32 count = thread.code.front().count;
-
-				//go to the first data
-				thread.code.pop_front();
-
-				auto skipped_thread_code = thread.code.range(thread.code.begin() + skip_offset, thread.code.end());
-
-				bool found = false;
-				Rune next_rune = thread.data.front();
-				for(usize i = 0; i < count; ++i, thread.code.pop_front())
-				{
-					auto& set_code = thread.code.front();
-					if(set_code.type == Bytecode::INST &&
-					   set_code.ins == ISA::RNG)
-					{
-						thread.code.pop_front();
-						Rune start = thread.code.front().data;
-						thread.code.pop_front();
-						Rune end = thread.code.front().data;
-
-						if(next_rune >= start && next_rune <= end)
-						{
-							found = true;
-							break;
-						}
-					}
-					else if(set_code.type == Bytecode::DATA)
-					{
-						if(next_rune == set_code.data)
-						{
-							found = true;
-							break;
-						}
-					}
-				}
-
-				thread.code = skipped_thread_code;
-				//set
-				if(current_ins.ins == ISA::SET)
-				{
-					if(found == true)
-						thread.data.pop_front();
-					return found;
-				}
-				//nset
-				else
-				{
-					if(found == false)
-						thread.data.pop_front();
-					return !found;
+					found = true;
+					break;
 				}
 			}
-
-			case ISA::PUSH:
+			else if(set_code.type == Bytecode::DATA)
 			{
-				thread.code.pop_front();
-				vm.stack.emplace_back(thread.code.front().value);
-				thread.code.pop_front();
-				return true;
+				if(next_rune == set_code.data)
+				{
+					found = true;
+					break;
+				}
 			}
+		}
 
-			case ISA::HALT:
-			case ISA::NONE:
-			default:
-				return false;
+		thread.code = skipped_thread_code;
+		//set
+		if(current_ins.ins == ISA::SET)
+		{
+			if(found == true)
+				thread.data.pop_front();
+			return found;
+		}
+		//nset
+		else
+		{
+			if(found == false)
+				thread.data.pop_front();
+			return !found;
 		}
 	}
+
+	inline static bool
+	_ins_push(VM_State& vm, Thread_State& thread, const Tape& program)
+	{
+		thread.code.pop_front();
+		vm.stack.emplace_back(thread.code.front().value);
+		thread.code.pop_front();
+		return true;
+	}
+
+	using Ins_Proc = bool(*)(VM_State&, Thread_State&, const Tape&);
+
+	Ins_Proc INS_PROCS[] = {
+		_ins_error,			//NONE
+		_ins_rune,			//RUNE
+		_ins_mtch,			//MTCH
+		_ins_splt,			//SPLT
+		_ins_jump,			//JUMP
+		_ins_set,			//SET
+		_ins_set,			//NSET
+		_ins_error,			//RNG
+		_ins_error,			//ANY
+		_ins_error,			//HALT
+		_ins_push			//PUSH
+	};
 
 	bool
 	_run(VM_State& vm, const String_Range& input, const Tape& program,
@@ -200,12 +215,14 @@ namespace rgx
 				if(thread.code.empty())
 					break;
 
+				auto& code = thread.code.front();
+
 				//check that we currently have instruction byte to execute
-				if(thread.code.front().type != Bytecode::INST)
+				if(code.type != Bytecode::INST)
 					break;
 
 				//check if this is the halt bytecode to stop the vm with success
-				if(thread.code.front().ins == ISA::HALT)
+				if(code.ins == ISA::HALT)
 				{
 					switch (mode)
 					{
@@ -222,7 +239,7 @@ namespace rgx
 				}
 			
 				//execute the instruction
-				if(!_exec_ins(vm, thread, program))
+				if(!INS_PROCS[static_cast<i32>(code.ins)](vm, thread, program))
 					break;
 			}
 		}

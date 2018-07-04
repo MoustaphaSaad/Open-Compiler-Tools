@@ -35,55 +35,33 @@ get_file_content(const String_Range& filename)
 void
 debug()
 {
-	String content = get_file_content("../../grammars/json.lxpr"_rng);
-	auto content_range = content.all();
-
-	Proto_Lexer lexer;
-	lxpr::meta_lexer_create(lexer);
-
-	Stopwatch watch;
-	usize count = 0;
-	watch.start();
-	Token tkn;
-	while(lexer.token(content_range, tkn))
+	String content = get_file_content("grammars/json.lxpr"_rng);
+	while(true)
 	{
-		//printfmt("token id: {}, token str: <{}>\n", tkn.type, tkn.str);
-		count++;
+		auto content_range = content.all();
+
+		Proto_Lexer lexer;
+		lxpr::meta_lexer_create(lexer);
+
+		Stopwatch watch;
+		usize count = 0;
+		watch.start();
+		Token tkn;
+		while(lexer.token(content_range, tkn))
+		{
+			//printfmt("token id: {}, token str: <{}>\n", tkn.type, tkn.str);
+			count++;
+		}
+		watch.stop();
+		println("token count: ", count);
+		println("lexing time: ", watch.milliseconds(), "ms");
 	}
-	watch.stop();
-	println("token count: ", count);
-	println("lexing time: ", watch.milliseconds(), "ms");
-}
-
-void
-debug_2()
-{
-	String content = get_file_content("../../grammars/json.lxpr"_rng);
-	auto content_range = content.all();
-
-	Proto_Lexer2 lexer;
-	lxpr::meta_lexer_create_2(lexer);
-	//pretty_print(lexer.single_tape);
-
-	Stopwatch watch;
-	usize count = 0;
-	watch.start();
-	Token tkn;
-	while(lexer.token(content_range, tkn))
-	{
-		//printfmt("token id: {}, token str: <{}>\n", tkn.type, tkn.str);
-		count++;
-	}
-	watch.stop();
-	println("token count: ", count);
-	println("lexing time: ", watch.milliseconds(), "ms");
 }
 
 i32
 main(i32 argc, byte **argv)
 {
 	debug();
-	debug_2();
 	return 0;
 	if(argc <= 1)
 		panic("Please provide a file name"_rng);
