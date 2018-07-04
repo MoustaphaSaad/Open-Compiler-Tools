@@ -268,6 +268,179 @@ namespace rgx
 		return _run(vm, input, program, res, mode);
 	}
 
+	bool
+	_validate_COUNT(const Tape& program,
+					usize &i)
+	{
+		//COUNT
+		if (program[i].type != Bytecode::COUNT)
+			return false;
+
+		usize data_count = program[i].count;
+		++i;
+		for (usize j = 0; j < data_count; j++, i++)
+		{
+			if (program[i].type != Bytecode::INST) {
+				//DATA
+				if (program[i].type != Bytecode::DATA)
+					return false;
+			}
+			else {
+				++i;
+				if (program[i-1].ins != ISA::RNG)
+					return false;
+				else if (program[i].type != Bytecode::DATA ||
+						 program[++i].type != Bytecode::DATA)
+					return false;
+			}
+		}
+		--i;
+		return true;
+	}
+
+	//Check it with split again with the two offsets
+	bool
+	_validate_OFFSET(const Tape& program,
+			         usize &i)
+	{
+		if (program[i].type != Bytecode::OFFSET)
+		{
+			return false;
+		}
+		//Check if these offsets exist
+		auto index = i + program[i].offset+1;
+		if (index >= program.count() )//||
+			//program[index].ins != program[i].ins)
+		{
+			return false;
+		}
+		return true;
+	}
+
+	bool
+	_validate_ISA(const Tape& program,
+		          usize &i)
+	{
+		bool valid = true;
+		
+		++i;
+		switch (program[i-1].ins)
+		{
+		case ISA::RUNE:
+		{
+			if (program[i].type == Bytecode::INST &&
+				program[i].ins != ISA::ANY)
+					valid = false;
+			else if (program[i].type != Bytecode::INST &&
+				     program[i].type != Bytecode::DATA)
+					valid = false;
+			break;
+		}
+		case ISA::MTCH:
+		{
+			valid = _validate_COUNT(program, i);
+			////COUNT
+			//if (program[i].type != Bytecode::COUNT)
+			//{
+			//	valid = false;
+			//	break;
+			//}
+			////DATA
+			//usize data_count = program[i].count;
+			//++i;
+			//for (usize j = 0; j < data_count; j++, i++)
+			//{
+			//	if (program[i].type != Bytecode::DATA)
+			//	{
+			//		valid = false;
+			//		break;
+			//	}
+			//}
+			//--i;
+			break;
+		}
+		case ISA::SPLT:
+		{
+			valid = _validate_OFFSET(program, i);
+			if (!valid)
+				break;
+			++i;
+			valid = _validate_OFFSET(program, i);
+			break;
+		}
+		case ISA::JUMP:
+		{
+			valid = _validate_OFFSET(program, i);
+			break;
+		}
+		case ISA::SET:
+		case ISA::NSET:
+		{
+			valid = _validate_OFFSET(program, i);
+			++i;
+			valid = _validate_COUNT(program, i);
+			break;
+		}
+		case ISA::RNG:
+		{
+			if (program[i].type != Bytecode::DATA ||
+				program[++i].type != Bytecode::DATA)
+				valid = false;
+
+			break;
+		}
+		case ISA::PUSH:
+		{
+			if (program[i].type != Bytecode::VALUE)
+				valid = false;
+
+			break;
+		}
+		default:
+			valid = false;
+			break;
+		}
+
+		if(valid)
+			++i;
+		return valid;
+	}
+
+	bool 
+	validate(const Tape& program,
+		     cppr::IO_Trait* out)
+	{
+		for (usize i = 0; i < program.count()-1; )
+		{
+			if (program[i].type != Bytecode::INST)
+			{
+				if(out != nullptr)
+					vprintf(out, "Not a correct program. Found {:0>10}: {}\n", i, program[i]);
+				return false;
+			}
+			
+			bool valid = _validate_ISA(program, i);
+			
+			if (!valid)
+			{
+				if (out != nullptr)
+					vprintf(out, "Not a correct program. Found {:0>10}: {}\n", i, program[i]);
+				return false;
+			}
+		}
+
+		//A correct program should end with ISA::HALT.
+		if (program[program.count() - 1].type != Bytecode::INST ||
+			program[program.count() - 1].ins != ISA::HALT)
+		{
+			if (out != nullptr)
+				vprintf(out, "Not a correct program. Found {:0>10}: {}\n", program.count() - 1,
+					program[program.count() - 1]);
+			return false;
+		}
+		return true;
+	}
+
 	//CPP code gen
 	/*
 	struct Gen_Block

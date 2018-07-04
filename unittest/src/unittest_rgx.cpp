@@ -13,6 +13,8 @@ TEST_CASE("concat test", "[concat]")
 		VM_State vm;
 		REQUIRE(compile("abc"_rng, program) == RGX_ERROR::OK);
 
+		CHECK(validate(program) == true);
+
 		CHECK(run(vm, "abc"_rng, program) == true);
 		CHECK(run(vm, "abd"_rng, program) == false);
 		CHECK(run(vm, "abccc"_rng, program) == true);
@@ -23,6 +25,8 @@ TEST_CASE("concat test", "[concat]")
 		Tape program;
 		VM_State vm;
 		REQUIRE(compile("مصطفى"_rng, program) == RGX_ERROR::OK);
+		
+		CHECK(validate(program) == true);
 
 		CHECK(run(vm, "مصطفى"_rng, program) == true);
 		CHECK(run(vm, "مصفى"_rng, program) == false);
@@ -35,6 +39,8 @@ TEST_CASE("concat test", "[concat]")
 		VM_State vm;
 		REQUIRE(compile("a(b)c"_rng, program) == RGX_ERROR::OK);
 
+		CHECK(validate(program) == true);
+
 		CHECK(run(vm, "abc"_rng, program) == true);
 		CHECK(run(vm, "abd"_rng, program) == false);
 		CHECK(run(vm, "abccc"_rng, program) == true);
@@ -46,6 +52,8 @@ TEST_CASE("concat test", "[concat]")
 		VM_State vm;
 		REQUIRE(compile("((a)((b)(c)))"_rng, program) == RGX_ERROR::OK);
 
+		CHECK(validate(program) == true);
+
 		CHECK(run(vm, "abc"_rng, program) == true);
 		CHECK(run(vm, "abd"_rng, program) == false);
 		CHECK(run(vm, "abccc"_rng, program) == true);
@@ -56,6 +64,8 @@ TEST_CASE("concat test", "[concat]")
 		Tape program;
 		VM_State vm;
 		REQUIRE(compile("(\\(a\\)((b)(c)*))"_rng, program) == RGX_ERROR::OK);
+
+		CHECK(validate(program) == true);
 
 		CHECK(run(vm, "abc"_rng, program) == false);
 		CHECK(run(vm, "abd"_rng, program) == false);
@@ -77,6 +87,8 @@ TEST_CASE("or test", "[or]")
 		VM_State vm;
 		REQUIRE(compile("abc|def"_rng, program) == RGX_ERROR::OK);
 
+		CHECK(validate(program) == true);
+
 		CHECK(run(vm, "abc"_rng, program) == true);
 		CHECK(run(vm, "abd"_rng, program) == false);
 		CHECK(run(vm, "abccc"_rng, program) == true);
@@ -90,6 +102,8 @@ TEST_CASE("or test", "[or]")
 		Tape program;
 		VM_State vm;
 		REQUIRE(compile("مصطفى|سعد"_rng, program) == RGX_ERROR::OK);
+
+		CHECK(validate(program) == true);
 
 		CHECK(run(vm, "مصطفى"_rng, program) == true);
 		CHECK(run(vm, "مصفى"_rng, program) == false);
@@ -105,6 +119,8 @@ TEST_CASE("or test", "[or]")
 		VM_State vm;
 		REQUIRE(compile("a(b|d)c"_rng, program) == RGX_ERROR::OK);
 
+		CHECK(validate(program) == true);
+
 		CHECK(run(vm, "abc"_rng, program) == true);
 		CHECK(run(vm, "abd"_rng, program) == false);
 		CHECK(run(vm, "abccc"_rng, program) == true);
@@ -119,6 +135,8 @@ TEST_CASE("or test", "[or]")
 		REQUIRE(compile("((a)|((b)(c)))"_rng, program) == RGX_ERROR::OK);
 		VM_State vm;
 
+		CHECK(validate(program) == true);
+
 		CHECK(run(vm, "abc"_rng, program) == true);
 		CHECK(run(vm, "bc"_rng, program) == true);
 		CHECK(run(vm, "abccc"_rng, program) == true);
@@ -131,6 +149,8 @@ TEST_CASE("or test", "[or]")
 		Tape program;
 		REQUIRE(compile("abc\\|def"_rng, program) == RGX_ERROR::OK);
 		VM_State vm;
+
+		CHECK(validate(program) == true);
 
 		CHECK(run(vm, "abc"_rng, program) == false);
 		CHECK(run(vm, "def"_rng, program) == false);
@@ -146,6 +166,8 @@ TEST_CASE("star test", "[star]")
 		REQUIRE(compile("abc*"_rng, program) == RGX_ERROR::OK);
 		VM_State vm;
 
+		CHECK(validate(program) == true);
+
 		CHECK(run(vm, "ab"_rng, program) == true);
 		CHECK(run(vm, "abc"_rng, program) == true);
 		CHECK(run(vm, "abccccc"_rng, program) == true);
@@ -158,6 +180,8 @@ TEST_CASE("star test", "[star]")
 		REQUIRE(compile("أبت*"_rng, program) == RGX_ERROR::OK);
 		VM_State vm;
 
+		CHECK(validate(program) == true);
+
 		CHECK(run(vm, "أب"_rng, program) == true);
 		CHECK(run(vm, "أبت"_rng, program) == true);
 		CHECK(run(vm, "أبتتتتت"_rng, program) == true);
@@ -169,6 +193,8 @@ TEST_CASE("star test", "[star]")
 		Tape program;
 		REQUIRE(compile("(abc|def)*"_rng, program) == RGX_ERROR::OK);
 		VM_State vm;
+
+		CHECK(validate(program) == true);
 
 		CHECK(run(vm, ""_rng, program) == true);
 		CHECK(run(vm, "abc"_rng, program) == true);
@@ -184,6 +210,8 @@ TEST_CASE("star test", "[star]")
 		REQUIRE(compile("abc\\*"_rng, program) == RGX_ERROR::OK);
 		VM_State vm;
 
+		CHECK(validate(program) == true);
+
 		CHECK(run(vm, "abc"_rng, program) == false);
 		CHECK(run(vm, ""_rng, program) == false);
 		CHECK(run(vm, "abc*"_rng, program) == true);
@@ -195,6 +223,8 @@ TEST_CASE("star test", "[star]")
 		REQUIRE(compile("\\**"_rng, program) == RGX_ERROR::OK);
 		VM_State vm;
 
+		CHECK(validate(program) == true);
+
 		CHECK(run(vm, ""_rng, program) == true);
 		CHECK(run(vm, "*******"_rng, program) == true);
 	}
@@ -204,6 +234,8 @@ TEST_CASE("star test", "[star]")
 		Tape program;
 		REQUIRE(compile("abc*?"_rng, program) == RGX_ERROR::OK);
 		VM_State vm;
+
+		CHECK(validate(program) == true);
 
 		Match_Result res;
 
@@ -226,6 +258,8 @@ TEST_CASE("plus test", "[plus]")
 		REQUIRE(compile("abc+"_rng, program) == RGX_ERROR::OK);
 		VM_State vm;
 
+		CHECK(validate(program) == true);
+
 		CHECK(run(vm, "ab"_rng, program) == false);
 		CHECK(run(vm, "abc"_rng, program) == true);
 		CHECK(run(vm, "abccccc"_rng, program) == true);
@@ -238,6 +272,8 @@ TEST_CASE("plus test", "[plus]")
 		REQUIRE(compile("ÃÈÊ+"_rng, program) == RGX_ERROR::OK);
 		VM_State vm;
 
+		CHECK(validate(program) == true);
+
 		CHECK(run(vm, "ÃÈ"_rng, program) == false);
 		CHECK(run(vm, "ÃÈÊ"_rng, program) == true);
 		CHECK(run(vm, "ÃÈÊÊÊÊ"_rng, program) == true);
@@ -249,6 +285,8 @@ TEST_CASE("plus test", "[plus]")
 		Tape program;
 		REQUIRE(compile("(abc|def)+"_rng, program) == RGX_ERROR::OK);
 		VM_State vm;
+
+		CHECK(validate(program) == true);
 
 		CHECK(run(vm, ""_rng, program) == false);
 		CHECK(run(vm, "abc"_rng, program) == true);
@@ -264,6 +302,8 @@ TEST_CASE("plus test", "[plus]")
 		REQUIRE(compile("abc\\+"_rng, program) == RGX_ERROR::OK);
 		VM_State vm;
 
+		CHECK(validate(program) == true);
+
 		CHECK(run(vm, "abc"_rng, program) == false);
 		CHECK(run(vm, ""_rng, program) == false);
 		CHECK(run(vm, "abc+"_rng, program) == true);
@@ -275,6 +315,8 @@ TEST_CASE("plus test", "[plus]")
 		REQUIRE(compile("\\++"_rng, program) == RGX_ERROR::OK);
 		VM_State vm;
 
+		CHECK(validate(program) == true);
+
 		CHECK(run(vm, ""_rng, program) == false);
 		CHECK(run(vm, "+"_rng, program) == true);
 		CHECK(run(vm, "+++++++"_rng, program) == true);
@@ -285,7 +327,9 @@ TEST_CASE("plus test", "[plus]")
 		Tape program;
 		REQUIRE(compile("abc+?"_rng, program) == RGX_ERROR::OK);
 		VM_State vm;
-		
+
+		CHECK(validate(program) == true);
+
 		Match_Result res;
 
 		CHECK(run(vm, "ab"_rng, program, res) == false);
@@ -303,6 +347,8 @@ TEST_CASE("optional test", "[optional]")
 		REQUIRE(compile("abc?"_rng, program) == RGX_ERROR::OK);
 		VM_State vm;
 
+		CHECK(validate(program) == true);
+
 		CHECK(run(vm, "ab"_rng, program) == true);
 		CHECK(run(vm, "abc"_rng, program) == true);
 		CHECK(run(vm, "abccccc"_rng, program) == true);
@@ -315,6 +361,8 @@ TEST_CASE("optional test", "[optional]")
 		REQUIRE(compile("ÃÈÊ?"_rng, program) == RGX_ERROR::OK);
 		VM_State vm;
 
+		CHECK(validate(program) == true);
+
 		CHECK(run(vm, "ÃÈ"_rng, program) == true);
 		CHECK(run(vm, "ÃÈÊ"_rng, program) == true);
 		CHECK(run(vm, "ÃÈÊÊÊÊ"_rng, program) == true);
@@ -326,6 +374,8 @@ TEST_CASE("optional test", "[optional]")
 		Tape program;
 		REQUIRE(compile("(abc|def)?"_rng, program) == RGX_ERROR::OK);
 		VM_State vm;
+
+		CHECK(validate(program) == true);
 
 		CHECK(run(vm, ""_rng, program) == true);
 		CHECK(run(vm, "abc"_rng, program) == true);
@@ -341,6 +391,8 @@ TEST_CASE("optional test", "[optional]")
 		REQUIRE(compile("abc\\?"_rng, program) == RGX_ERROR::OK);
 		VM_State vm;
 
+		CHECK(validate(program) == true);
+
 		CHECK(run(vm, "abc"_rng, program) == false);
 		CHECK(run(vm, ""_rng, program) == false);
 		CHECK(run(vm, "abc?"_rng, program) == true);
@@ -351,6 +403,8 @@ TEST_CASE("optional test", "[optional]")
 		Tape program;
 		REQUIRE(compile("\\??"_rng, program) == RGX_ERROR::OK);
 		VM_State vm;
+
+		CHECK(validate(program) == true);
 
 		CHECK(run(vm, ""_rng, program) == true);
 		CHECK(run(vm, "?"_rng, program) == true);
@@ -363,6 +417,8 @@ TEST_CASE("optional test", "[optional]")
 		Tape program;
 		REQUIRE(compile("abc??"_rng, program) == RGX_ERROR::OK);
 		VM_State vm;
+
+		CHECK(validate(program) == true);
 
 		Match_Result res;
 
@@ -380,6 +436,8 @@ TEST_CASE("set test", "[set]")
 		REQUIRE(compile("[abc]f"_rng, program) == RGX_ERROR::OK);
 		VM_State vm;
 
+		CHECK(validate(program) == true);
+
 		CHECK(run(vm, "f"_rng, program) == false);
 		CHECK(run(vm, "af"_rng, program) == true);
 		CHECK(run(vm, "bf"_rng, program) == true);
@@ -393,6 +451,8 @@ TEST_CASE("set test", "[set]")
 		Tape program;
 		REQUIRE(compile("[^abc]f"_rng, program) == RGX_ERROR::OK);
 		VM_State vm;
+
+		CHECK(validate(program) == true);
 
 		CHECK(run(vm, "f"_rng, program) == false);
 		CHECK(run(vm, "af"_rng, program) == false);
@@ -408,6 +468,8 @@ TEST_CASE("set test", "[set]")
 		REQUIRE(compile("[a-c]f"_rng, program) == RGX_ERROR::OK);
 		VM_State vm;
 
+		CHECK(validate(program) == true);
+
 		CHECK(run(vm, "f"_rng, program) == false);
 		CHECK(run(vm, "af"_rng, program) == true);
 		CHECK(run(vm, "bf"_rng, program) == true);
@@ -421,6 +483,8 @@ TEST_CASE("set test", "[set]")
 		Tape program;
 		REQUIRE(compile("[a-a]f"_rng, program) == RGX_ERROR::OK);
 		VM_State vm;
+
+		CHECK(validate(program) == true);
 
 		CHECK(run(vm, "f"_rng, program) == false);
 		CHECK(run(vm, "af"_rng, program) == true);
@@ -436,6 +500,8 @@ TEST_CASE("set test", "[set]")
 		REQUIRE(compile("[^a-c]f"_rng, program) == RGX_ERROR::OK);
 		VM_State vm;
 
+		CHECK(validate(program) == true);
+
 		CHECK(run(vm, "f"_rng, program) == false);
 		CHECK(run(vm, "af"_rng, program) == false);
 		CHECK(run(vm, "bf"_rng, program) == false);
@@ -449,6 +515,8 @@ TEST_CASE("set test", "[set]")
 		Tape program;
 		REQUIRE(compile("[^a-a]f"_rng, program) == RGX_ERROR::OK);
 		VM_State vm;
+
+		CHECK(validate(program) == true);
 
 		CHECK(run(vm, "f"_rng, program) == false);
 		CHECK(run(vm, "af"_rng, program) == false);
@@ -464,6 +532,8 @@ TEST_CASE("set test", "[set]")
 		REQUIRE(compile("[a\\-a]f"_rng, program) == RGX_ERROR::OK);
 		VM_State vm;
 
+		CHECK(validate(program) == true);
+
 		CHECK(run(vm, "f"_rng, program) == false);
 		CHECK(run(vm, "af"_rng, program) == true);
 		CHECK(run(vm, "bf"_rng, program) == false);
@@ -478,6 +548,8 @@ TEST_CASE("set test", "[set]")
 		REQUIRE(compile("[\\\\]f"_rng, program) == RGX_ERROR::OK);
 		VM_State vm;
 
+		CHECK(validate(program) == true);
+
 		CHECK(run(vm, "\\f"_rng, program) == true);
 		CHECK(run(vm, "af"_rng, program) == false);
 	}
@@ -487,6 +559,8 @@ TEST_CASE("set test", "[set]")
 		Tape program;
 		REQUIRE(compile("[a]f"_rng, program) == RGX_ERROR::OK);
 		VM_State vm;
+
+		CHECK(validate(program) == true);
 
 		CHECK(run(vm, "\\f"_rng, program) == false);
 		CHECK(run(vm, "af"_rng, program) == true);
@@ -498,6 +572,8 @@ TEST_CASE("set test", "[set]")
 		REQUIRE(compile("[a\\]]f"_rng, program) == RGX_ERROR::OK);
 		VM_State vm;
 
+		CHECK(validate(program) == true);
+
 		CHECK(run(vm, "\\f"_rng, program) == false);
 		CHECK(run(vm, "af"_rng, program) == true);
 		CHECK(run(vm, "]f"_rng, program) == true);
@@ -508,7 +584,9 @@ TEST_CASE("set test", "[set]")
 		Tape program;
 		REQUIRE(compile("[a\\]]*f"_rng, program) == RGX_ERROR::OK);
 		VM_State vm;
-		
+
+		CHECK(validate(program) == true);
+
 		CHECK(run(vm, "\\f"_rng, program) == false);
 		CHECK(run(vm, "af"_rng, program) == true);
 		CHECK(run(vm, "f"_rng, program) == true);
@@ -525,6 +603,8 @@ TEST_CASE("any test", "[any]")
 		REQUIRE(compile("ab."_rng, program) == RGX_ERROR::OK);
 		VM_State vm;
 
+		CHECK(validate(program) == true);
+
 		CHECK(run(vm, "abc"_rng, program) == true);
 		CHECK(run(vm, "acd"_rng, program) == false);
 		CHECK(run(vm, "abccc"_rng, program) == true);
@@ -535,6 +615,8 @@ TEST_CASE("any test", "[any]")
 		Tape program;
 		REQUIRE(compile("ãÕØÝ."_rng, program) == RGX_ERROR::OK);
 		VM_State vm;
+
+		CHECK(validate(program) == true);
 
 		CHECK(run(vm, "ãÕØÝì"_rng, program) == true);
 		CHECK(run(vm, "ãÕÝì"_rng, program) == false);
@@ -547,6 +629,8 @@ TEST_CASE("any test", "[any]")
 		REQUIRE(compile("a(.)c"_rng, program) == RGX_ERROR::OK);
 		VM_State vm;
 
+		CHECK(validate(program) == true);
+
 		CHECK(run(vm, "abc"_rng, program) == true);
 		CHECK(run(vm, "abd"_rng, program) == false);
 		CHECK(run(vm, "abccc"_rng, program) == true);
@@ -558,6 +642,8 @@ TEST_CASE("any test", "[any]")
 		REQUIRE(compile("((a)((.)(c)))"_rng, program) == RGX_ERROR::OK);
 		VM_State vm;
 
+		CHECK(validate(program) == true);
+
 		CHECK(run(vm, "abc"_rng, program) == true);
 		CHECK(run(vm, "abd"_rng, program) == false);
 		CHECK(run(vm, "abccc"_rng, program) == true);
@@ -568,6 +654,8 @@ TEST_CASE("any test", "[any]")
 		Tape program;
 		REQUIRE(compile("(\\(a\\)((b)(.)*))"_rng, program) == RGX_ERROR::OK);
 		VM_State vm;
+
+		CHECK(validate(program) == true);
 
 		CHECK(run(vm, "abc"_rng, program) == false);
 		CHECK(run(vm, "abd"_rng, program) == false);

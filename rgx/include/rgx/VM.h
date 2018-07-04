@@ -67,4 +67,8 @@ namespace rgx
 		const cppr::String_Range& input,
 		const Tape& program,
 		MATCH_MODE mode = MATCH_MODE::FIRST_MATCH);
+
+	API_RGX bool 
+	validate(const Tape& program,
+		     cppr::IO_Trait* out = nullptr);
 }
