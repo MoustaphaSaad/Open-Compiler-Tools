@@ -268,176 +268,206 @@ namespace rgx
 		return _run(vm, input, program, res, mode);
 	}
 
-	bool
-	_validate_COUNT(const Tape& program,
-					usize &i)
-	{
-		//COUNT
-		if (program[i].type != Bytecode::COUNT)
-			return false;
-
-		usize data_count = program[i].count;
-		++i;
-		for (usize j = 0; j < data_count; j++, i++)
-		{
-			if (program[i].type != Bytecode::INST) {
-				//DATA
-				if (program[i].type != Bytecode::DATA)
-					return false;
-			}
-			else {
-				++i;
-				if (program[i-1].ins != ISA::RNG)
-					return false;
-				else if (program[i].type != Bytecode::DATA ||
-						 program[++i].type != Bytecode::DATA)
-					return false;
-			}
-		}
-		--i;
-		return true;
-	}
+	#define VALIDATE(expr, out, ...) \
+	do\
+	{\
+		if(!(expr))\
+		{\
+			if(out !=nullptr)\
+				 vprintf(out, ##__VA_ARGS__);\
+			return false;\
+		}\
+	}while (false)
 
 	//Check it with split again with the two offsets
 	bool
 	_validate_OFFSET(const Tape& program,
-			         usize &i)
+					 usize &pc,
+		             cppr::IO_Trait* out)
 	{
-		if (program[i].type != Bytecode::OFFSET)
-		{
-			return false;
-		}
+		const Bytecode& offset_bc = program[pc];
+		VALIDATE(offset_bc.type == Bytecode::OFFSET, out,
+			"Error[{}]: expected a OFFSET but found {}\n", pc, offset_bc);
+
 		//Check if these offsets exist
-		auto index = i + program[i].offset+1;
-		if (index >= program.count() )//||
-			//program[index].ins != program[i].ins)
-		{
-			return false;
-		}
+		auto offset = pc + offset_bc.offset; // needs a check
+		VALIDATE(offset <= program.count(), out,
+			"Error[{}]: unexpected end of program, expected an instruction at {} offset.\n", pc, offset);
+		//checking the expected instruction
+		auto& ins_at_offset = program[offset];
+		//VALIDATE(offset_bc.ins == ins_at_offset.ins, out,
+		//         "Error[{}]: expected {} instruction instead found {}.\n", offset, offset_bc.ins, ins_at_offset.ins);
+		VALIDATE(((offset_bc.offset == 0) && (offset_bc.ins == ISA::NONE)) ||
+				((offset_bc.offset > 0) && ins_at_offset.type == Bytecode::INST),
+				out,
+				"Error[{}]: expected an instruction instead found.\n", offset);
+		/*VALIDATE((offset_bc.ins != ISA::NONE) &&
+			(ins_at_offset.type == Bytecode::INST), out,
+			"Error[{}]: expected an instruction instead found {}.\n", offset, ins_at_offset.type);*/
 		return true;
 	}
 
 	bool
 	_validate_ISA(const Tape& program,
-		          usize &i)
-	{
-		bool valid = true;
-		
-		++i;
-		switch (program[i-1].ins)
+		          usize &pc,
+				  cppr::IO_Trait* out)
+	{		
+		//++i;
+		switch (program[pc].ins)
 		{
 		case ISA::RUNE:
 		{
-			if (program[i].type == Bytecode::INST &&
-				program[i].ins != ISA::ANY)
-					valid = false;
-			else if (program[i].type != Bytecode::INST &&
-				     program[i].type != Bytecode::DATA)
-					valid = false;
-			break;
+			++pc;
+			VALIDATE(pc < program.count(), out, "Error[{}]: unexpected end of program, was expecting a RUNE data but found nothing", pc);
+			const Bytecode& rune_data = program[pc];
+			VALIDATE((rune_data.type == Bytecode::INST && rune_data.ins == ISA::ANY) ||
+				(rune_data.type == Bytecode::DATA), out, "Error[{}]: expected a RUNE data but found {}\n", pc, rune_data);
+			return true;
 		}
 		case ISA::MTCH:
 		{
-			valid = _validate_COUNT(program, i);
-			////COUNT
-			//if (program[i].type != Bytecode::COUNT)
-			//{
-			//	valid = false;
-			//	break;
-			//}
-			////DATA
-			//usize data_count = program[i].count;
-			//++i;
-			//for (usize j = 0; j < data_count; j++, i++)
-			//{
-			//	if (program[i].type != Bytecode::DATA)
-			//	{
-			//		valid = false;
-			//		break;
-			//	}
-			//}
-			//--i;
-			break;
+			++pc;
+			VALIDATE(pc < program.count(), out, "Error[{}]: unexpected end of program, was expecting a COUNT but found nothing", pc);
+			//Count
+			const Bytecode& count_bc = program[pc];
+			VALIDATE((count_bc.type == Bytecode::COUNT),
+				     out,
+				     "Error[{}]: expected a count but found {}\n", pc, count_bc);
+
+			usize end_count = pc + count_bc.count;
+			//Check count
+			VALIDATE(end_count < program.count(), out,
+				"Error[{}]: unexpected end of program, was expecting a {} set of data but found nothing",
+				pc, end_count);
+
+			while (pc < end_count)
+			{
+				++pc;
+				//Data
+				const Bytecode& data_bytecode = program[pc];
+				VALIDATE(data_bytecode.type == Bytecode::DATA, out,
+					     "Error[{}]: expected a DATA but found{}\n", pc, data_bytecode);
+			}
+			return true;
 		}
 		case ISA::SPLT:
 		{
-			valid = _validate_OFFSET(program, i);
+			++pc;
+			VALIDATE(pc < program.count(), out, "Error[{}]: unexpected end of program, was expecting a OFFSET data but found nothing", pc);
+			bool valid = _validate_OFFSET(program, pc, out);
 			if (!valid)
-				break;
-			++i;
-			valid = _validate_OFFSET(program, i);
-			break;
+				return false;
+			++pc;
+			return _validate_OFFSET(program, pc, out);
 		}
 		case ISA::JUMP:
 		{
-			valid = _validate_OFFSET(program, i);
-			break;
+			++pc;
+			VALIDATE(pc < program.count(), out, "Error[{}]: unexpected end of program, was expecting a OFFSET but found nothing", pc);
+			return _validate_OFFSET(program, pc, out);
 		}
 		case ISA::SET:
 		case ISA::NSET:
 		{
-			valid = _validate_OFFSET(program, i);
-			++i;
-			valid = _validate_COUNT(program, i);
-			break;
-		}
-		case ISA::RNG:
-		{
-			if (program[i].type != Bytecode::DATA ||
-				program[++i].type != Bytecode::DATA)
-				valid = false;
+			++pc;
+			VALIDATE(pc < program.count(), out, "Error[{}]: unexpected end of program, was expecting a OFFSET but found nothing", pc);
+			//Offset
+			bool valid = _validate_OFFSET(program, pc, out);
+			if (!valid)
+				return false;
+			++pc;
+			VALIDATE(pc < program.count(), out, "Error[{}]: unexpected end of program, was expecting a COUNT but found nothing", pc);
 
-			break;
+			//Count
+			const Bytecode& count_bc = program[pc];
+			VALIDATE((count_bc.type == Bytecode::COUNT),
+				out,
+				"Error[{}]: expected a count but found {}\n", pc, count_bc);
+
+			usize end_count = pc + count_bc.count;
+			//Check count
+			VALIDATE(end_count < program.count(), out,
+				"Error[{}]: unexpected end of program, was expecting a {} set of data but found nothing",
+				pc, end_count);
+
+			while (pc < end_count)
+			{
+				++pc;
+				if (program[pc].type == Bytecode::INST)
+				{
+					//RNG
+					const Bytecode& rng_bytecode = program[pc];
+					VALIDATE((rng_bytecode.ins == ISA::RNG),
+							out,
+							"Error[{}]: expected a RNG but found{}\n", pc, rng_bytecode);
+					VALIDATE((pc+2 < program.count()), out,
+						"Error[{}]: unexpected end of program, was expecting a RNG data but found nothing", program.count()-1);
+					//Rng_from
+					const Bytecode& rng_from = program[++pc];
+					VALIDATE(rng_from.type == Bytecode::DATA,
+						out,
+						"Error[{}]: expected a DATA but found{}\n", pc, rng_from);
+					//RNG_to
+					const Bytecode& rng_to = program[++pc];
+					VALIDATE(rng_to.type == Bytecode::DATA,
+						out,
+						"Error[{}]: expected a DATA but found{}\n", pc, rng_to);
+					//Checking the range
+					VALIDATE(rng_from.data <= rng_to.data,
+						out,
+						"Error[{}]: expected a valid rang but found rang from {} to {} instead.\n", pc, rng_from, rng_to);
+				}
+				else
+				{
+					//Data
+					const Bytecode& data_bytecode = program[pc];
+					VALIDATE(data_bytecode.type == Bytecode::DATA, out,
+						"Error[{}]: expected a DATA but found{}\n", pc, data_bytecode);
+				}
+			}
+			return true;
 		}
 		case ISA::PUSH:
 		{
-			if (program[i].type != Bytecode::VALUE)
-				valid = false;
-
-			break;
+			++pc;
+			VALIDATE(pc < program.count(), out, "Error[{}]: unexpected end of program, was expecting a PUSH but found nothing", pc);
+			const Bytecode& push_value = program[pc];
+			VALIDATE(push_value.type == Bytecode::VALUE,
+				     out,
+				     "Error[{}]: expected a VALUE but found {}\n", pc, push_value);
+			return true;
 		}
+		case ISA::RNG:
+		case ISA::ANY:
 		default:
-			valid = false;
-			break;
+			return  false;
 		}
-
-		if(valid)
-			++i;
-		return valid;
 	}
 
 	bool 
 	validate(const Tape& program,
 		     cppr::IO_Trait* out)
 	{
-		for (usize i = 0; i < program.count()-1; )
-		{
-			if (program[i].type != Bytecode::INST)
-			{
-				if(out != nullptr)
-					vprintf(out, "Not a correct program. Found {:0>10}: {}\n", i, program[i]);
-				return false;
-			}
-			
-			bool valid = _validate_ISA(program, i);
-			
-			if (!valid)
-			{
-				if (out != nullptr)
-					vprintf(out, "Not a correct program. Found {:0>10}: {}\n", i, program[i]);
-				return false;
-			}
-		}
+		if (program.empty()) return true;
 
-		//A correct program should end with ISA::HALT.
-		if (program[program.count() - 1].type != Bytecode::INST ||
-			program[program.count() - 1].ins != ISA::HALT)
+		usize pc = 0;
+		while (pc < program.count()-1)
 		{
-			if (out != nullptr)
-				vprintf(out, "Not a correct program. Found {:0>10}: {}\n", program.count() - 1,
-					program[program.count() - 1]);
-			return false;
+			auto& code = program[pc];
+			VALIDATE(code.type == Bytecode::INST,
+					 out,
+				     "Error[{}]: expected an instruction but found {}\n", pc, program[pc]);
+		
+			VALIDATE(_validate_ISA(program, pc, out),
+				     out,
+				     "Error[{}]: expected an instruction but found {}\n", pc, program[pc]);
+			++pc;
 		}
+		//A correct program should end with ISA::HALT.
+		auto& last_inst = program.back();
+		VALIDATE(last_inst.type == Bytecode::INST && last_inst.ins == ISA::HALT,
+			     out,
+			     "Error[{}]: expected a halt instruction at the end of the program but found {}\n", program.count() - 1, last_inst);
 		return true;
 	}
 
